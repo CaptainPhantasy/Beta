@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+
+set -e  # Exit immediately if any command fails
+set -x  # Print each command before executing it
+
+# Ensure the entire script is downloaded
+{
+  # Utility Functions
+  nvm_has() {
+    type "$1" > /dev/null 2>&1
+  }
+
+  nvm_echo() {
+    command printf %s\\n "$*" 2>/dev/null
+  }
+
+  nvm_grep() {
+    GREP_OPTIONS='' command grep "$@"
+  }
+
+  nvm_default_install_dir() {
+    if [ -z "${XDG_CONFIG_HOME-}" ]; then
+      printf "%s" "${HOME}/.nvm"
+    else
+      printf "%s" "${XDG_CONFIG_HOME}/nvm"
+    fi
+  }
+
+  nvm_install_dir() {
+    if [ -n "${NVM_DIR-}" ]; then
+      printf "%s" "${NVM_DIR}"
+    else
+      nvm_default_install_dir
+    fi
+  }
+
+  nvm_latest_version() {
+    nvm_echo "v0.40.1"
+  }
+
+  # Debugging Variables
+  readonly INSTALL_DIR="$(nvm_install_dir)"
+  readonly NVM_VERSION="${NVM_INSTALL_VERSION:-$(nvm_latest_version)}"
+  readonly NVM_SOURCE="https://github.com/nvm-sh/nvm.git"
+
+  nvm_echo "Debug: NVM_DIR is set to '${INSTALL_DIR}'"
+  nvm_echo "Debug: NVM_SOURCE is set to '${NVM_SOURCE}'"
+  nvm_echo "Debug: METHOD is set to '${METHOD-}'"
+
+  # Trap for Cleanup on Failure
+  cleanup_on_failure() {
+    if [ -d "${INSTALL_DIR}" ] && [ -z "$(ls -A "${INSTALL_DIR}")" ]; then
+      nvm_echo "=> Cleaning up incomplete installation at '${INSTALL_DIR}'"
+      rm -rf "${INSTALL_DIR}"
+    fi
+  }
+  trap cleanup_on_failure EXIT
+
+  # Installation Functions
+  install_nvm_from_git() {
+    nvm_echo "=> Installing NVM from Git to directory '${INSTALL_DIR}'"
+
+    if [ -d "${INSTALL_DIR}/.git" ]; then
+      nvm_echo "=> NVM is already installed in '${INSTALL_DIR}', trying to update using git"
+      (cd "${INSTALL_DIR}" && command git fetch --tags origin && command git checkout --quiet "${NVM_VERSION}")
+    else
+      nvm_echo "=> Cloning NVM repository from GitHub"
+      mkdir -p "${INSTALL_DIR}"
+      if ! command git clone "${NVM_SOURCE}" --depth=1 --branch "${NVM_VERSION}" "${INSTALL_DIR}"; then
+        nvm_echo >&2 'Failed to clone NVM repository via Git. Falling back to the script method...'
+        install_nvm_as_script
+        return
+      fi
+    fi
+
+    nvm_echo "=> Checking out version '${NVM_VERSION}'"
+    (cd "${INSTALL_DIR}" && command git checkout --quiet "${NVM_VERSION}")
+  }
+
+  install_nvm_as_script() {
+    nvm_echo "=> Installing NVM using script method"
+    local NVM_SCRIPT_URL="https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh"
+
+    if nvm_has curl; then
+      curl -o- "${NVM_SCRIPT_URL}" | bash
+    elif nvm_has wget; then
+      wget -qO- "${NVM_SCRIPT_URL}" | bash
+    else
+      nvm_echo >&2 "You need curl or wget to install NVM"
+      exit 1
+    fi
+  }
+
+  nvm_do_install() {
+    nvm_echo "=> Starting NVM installation process"
+
+    if [ -z "${METHOD-}" ]; then
+      if nvm_has git; then
+        install_nvm_from_git
+      elif nvm_has curl || nvm_has wget; then
+        install_nvm_as_script
+      else
+        nvm_echo >&2 'You need git, curl, or wget to install NVM'
+        exit 1
+      fi
+    elif [ "${METHOD}" = 'git' ]; then
+      if ! nvm_has git; then
+        nvm_echo >&2 "You need git to install NVM"
+        exit 1
+      fi
+      install_nvm_from_git
+    elif [ "${METHOD}" = 'script' ]; then
+      if ! nvm_has curl && ! nvm_has wget; then
+        nvm_echo >&2 "You need curl or wget to install NVM"
+        exit 1
+      fi
+      install_nvm_as_script
+    else
+      nvm_echo >&2 "Invalid installation method: ${METHOD}"
+      exit 1
+    fi
+
+    nvm_echo "=> NVM installation process completed"
+  }
+
+  # Automated Tests for Different Environments
+  run_tests() {
+    nvm_echo "=> Running automated tests for different environments"
+
+    if ! nvm_has git && ! nvm_has curl && ! nvm_has wget; then
+      nvm_echo >&2 "Test Failed: Git, curl, and wget are all missing. The script cannot proceed."
+      nvm_echo >&2 "Please install one of the following tools:"
+      nvm_echo >&2 "  - Install Git: https://git-scm.com/book/en/v2/Getting-Started-Installing-Git"
+      nvm_echo >&2 "  - Install curl: https://curl.se/docs/install.html"
+      nvm_echo >&2 "  - Install wget: https://www.gnu.org/software/wget/"
+      exit 1
+    fi
+
+    if nvm_has git; then
+      nvm_echo "Test Passed: Git is available. Verifying Git installation..."
+      command git --version
+    fi
+
+    if nvm_has curl; then
+      nvm_echo "Test Passed: curl is available. Verifying curl installation..."
+      command curl --version
+    fi
+
+    if nvm_has wget; then
+      nvm_echo "Test Passed: wget is available. Verifying wget installation..."
+      command wget --version
+    fi
+
+    nvm_echo "=> All automated tests passed"
+  }
+
+  # Test Installed NVM Functionality
+  test_nvm_functionality() {
+    nvm_echo "=> Verifying the NVM installation..."
+    export NVM_DIR="${INSTALL_DIR}"
+    [ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"
+
+    if command -v nvm > /dev/null 2>&1; then
+      nvm_echo "=> NVM is successfully installed. Version: $(nvm --version)"
+    else
+      nvm_echo >&2 "=> NVM installation failed. Please check your setup."
+      exit 1
+    fi
+  }
+
+  # Main Execution
+  run_tests
+  nvm_do_install
+  test_nvm_functionality
+
+  # Disable Command Printing
+  set +x
+
+  # Remove Trap if Successful
+  trap - EXIT
+
+} # End of script
