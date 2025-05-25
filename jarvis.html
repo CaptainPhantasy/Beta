@@ -125,36 +125,109 @@ let micButton;
 
 // Function to initialize AudioContext
 function initializeAudio() {
-  if (!audioContext) {
-    try {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      console.log("AudioContext initialized.");
-      if (audioContext.state === 'suspended') {
-        audioContext.resume().then(() => {
-          console.log("AudioContext resumed successfully after initialization.");
-        }).catch(e => console.error("Error resuming AudioContext after initialization:", e));
-      }
-    } catch (e) {
-      console.error("Error initializing AudioContext:", e);
-      alert("AudioContext could not be initialized.");
-    }
+  if (audioContext) {
+    return audioContext;
   }
+
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    console.log("AudioContext created. Initial state:", audioContext.state);
+
+    const unlockAudioHandler = async () => {
+      console.log('Unlock gesture received. Current audioContext state:', audioContext.state);
+      if (audioContext.state === 'suspended') {
+        // Play a silent sound
+        const oscillator = audioContext.createOscillator();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(20, audioContext.currentTime); // Low, often inaudible
+        
+        const gainNode = audioContext.createGain();
+        gainNode.gain.setValueAtTime(0.001, audioContext.currentTime); // Very low volume
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.001); // Play for a very short duration
+        
+        oscillator.onended = () => {
+            console.log("Silent oscillator sound played for unlock.");
+        };
+
+        // --- Inserted code as per subtask ---
+        if (audioContext && audioContext.state === 'suspended') {
+            audioContext.resume().then(() => {
+                console.log("AudioContext resumed from within unlockAudioHandler after silent sound.");
+                showStatusFloat("Audio unlocked!", 2000);
+            }).catch(e => console.error("Error resuming AudioContext from unlockAudioHandler:", e));
+        }
+        // --- End of inserted code ---
+      } else {
+        console.log("AudioContext already running, no need for silent sound or resume from unlock handler.");
+      }
+      
+      // Remove event listeners after the first interaction
+      document.removeEventListener('click', unlockAudioHandler, { capture: true, once: true });
+      document.removeEventListener('touchend', unlockAudioHandler, { capture: true, once: true });
+      document.removeEventListener('keydown', unlockAudioHandler, { capture: true, once: true });
+      document.removeEventListener('mousedown', unlockAudioHandler, { capture: true, once: true });
+      console.log("Unlock event listeners removed.");
+    };
+
+    if (audioContext.state === 'suspended') {
+      console.log("AudioContext is suspended. Setting up unlock event listeners.");
+      // Setup event listeners that call unlockAudioHandler on first user gesture
+      // Using capture: true and once: true to ensure they fire early and only once.
+      document.addEventListener('click', unlockAudioHandler, { capture: true, once: true });
+      document.addEventListener('touchend', unlockAudioHandler, { capture: true, once: true });
+      document.addEventListener('keydown', unlockAudioHandler, { capture: true, once: true });
+      document.addEventListener('mousedown', unlockAudioHandler, { capture: true, once: true });
+      showStatusFloat("Tap screen or press key to enable audio.", 3000);
+    }
+
+    // Attempt an immediate resume as well. This might work without user gesture on some browsers/conditions.
+    // The unlockAudioHandler serves as a more robust backup if this initial resume fails or context suspends later.
+    if (audioContext.state === 'suspended') {
+        audioContext.resume().then(() => {
+            console.log("AudioContext resumed successfully immediately after initialization.");
+        }).catch(e => {
+            console.warn("Immediate AudioContext resume failed after initialization (expected on some browsers, user gesture needed):", e.message);
+        });
+    }
+
+  } catch (e) {
+    console.error("Error initializing AudioContext:", e);
+    alert("AudioContext could not be initialized. Your browser might not support it or it might be blocked.");
+  }
+  
   return audioContext;
 }
 
+// This global unlockAudio function is now largely superseded by the handler in initializeAudio for the *initial* unlock.
+// It can be kept for explicit user-triggered resume attempts if the context suspends later for other reasons,
+// or it can be removed if the new mechanism is deemed sufficient.
+// For now, let's keep it but note its changed role.
 function unlockAudio() {
   if (!audioContext) {
-    initializeAudio();
+    console.log("unlockAudio called, but audioContext not yet initialized. Initializing now.");
+    initializeAudio(); // This will set up the new unlock mechanism if needed.
+    // If initializeAudio itself needs a gesture, this button click might be that gesture.
+    return; 
   }
-  if (audioContext && audioContext.state === 'suspended') {
+  
+  console.log("Global unlockAudio button clicked. Current state:", audioContext.state);
+  if (audioContext.state === 'suspended') {
     audioContext.resume().then(() => {
-      console.log("AudioContext resumed from unlockAudio.");
+      console.log("AudioContext resumed from global unlockAudio button.");
       showStatusFloat("AudioContext Resumed!", 3000);
     }).catch(e => {
-      console.error("Error resuming AudioContext from unlockAudio:", e);
+      console.error("Error resuming AudioContext from global unlockAudio button:", e);
       showStatusFloat("Error resuming AudioContext.", 3000);
     });
-  } else if (audioContext) {
+  } else if (audioContext.state !== 'running') {
+    console.log("AudioContext not running, but not suspended either. State:", audioContext.state);
+    showStatusFloat("AudioContext state: " + audioContext.state, 3000);
+  } else {
     showStatusFloat("AudioContext is already active.", 3000);
   }
 }
@@ -408,34 +481,53 @@ async function textToSpeech(text) {
     isSpeaking = true;
     if(speakingIndicator) speakingIndicator.classList.add('active');
 
-    let voiceLoadRetryCount = 0;
+    // speechReady is still useful if set by onvoiceschanged, which updates global `voices`.
 
-    function attemptToSpeak() {
-        if (!speechReady && voiceLoadRetryCount < MAX_VOICE_LOAD_RETRIES) {
-            console.log(`Voices not ready, retrying... (${voiceLoadRetryCount + 1})`);
-            voices = speechSynthesis.getVoices(); 
-            if (voices.length > 0) speechReady = true;
-            voiceLoadRetryCount++;
-            setTimeout(attemptToSpeak, 500); 
-            return;
+    async function attemptToSpeak() {
+        // Requirement 1: Correct Voice List Retry Logic
+        // Ensure global `voices` is used and updated. `voices` is already let globally.
+        // `voices` is populated by `initializeApp` and `speechSynthesis.onvoiceschanged`.
+        // This retry can be a fallback if `onvoiceschanged` is slow or fails.
+        if (voices.length === 0) { // Check global `voices`
+            console.log("Global voices list initially empty. Waiting 50ms to retry getVoices()...");
+            await new Promise(resolve => setTimeout(resolve, 50));
+            voices = window.speechSynthesis.getVoices(); // Assign back to global 'voices'
+            if (voices.length > 0) {
+                console.log("Retrieved voices on second attempt via attemptToSpeak:", voices.length);
+                if (!speechReady) speechReady = true; // Update speechReady status
+            } else {
+                console.log("Global voices list still empty after retry in attemptToSpeak.");
+            }
         }
 
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'en-US'; 
 
-        if (voices.length === 0) {
-            console.warn("No speech synthesis voices available after retry. Attempting to speak with default voice (iOS fallback).");
-        } else {
-            let selectedVoice = voices.find(voice => voice.name === 'Google US English') || 
-                                voices.find(voice => voice.lang === 'en-US' && voice.default) ||
-                                voices.find(voice => voice.lang === 'en-US');
-            
-            if (selectedVoice) {
-                utterance.voice = selectedVoice;
-                console.log("Using voice:", selectedVoice.name);
-            } else {
-                console.warn("Could not find a preferred voice. Using browser default.");
+        // Requirement 2: Default Voice Fallback
+        let selectedVoice = null;
+        if (voices.length > 0) { // Use the (potentially retried) global `voices`
+            const voicePreferences = [
+                (v) => v.lang === 'en-US' && v.name.toLowerCase().includes('google') && v.name.toLowerCase().includes('male'),
+                (v) => v.lang === 'en-GB' && v.name.toLowerCase().includes('male'),
+                (v) => v.lang === 'en-US' && v.name.toLowerCase().includes('male'),
+                (v) => v.lang === 'en-GB' && v.name.toLowerCase().includes('female'),
+                (v) => v.lang === 'en-US' && v.name.toLowerCase().includes('female'),
+                (v) => v.lang === 'en-US' && v.default,
+                (v) => v.lang.startsWith('en-') && v.default,
+                (v) => v.default
+            ];
+            for (const preference of voicePreferences) {
+                selectedVoice = voices.find(preference);
+                if (selectedVoice) break;
             }
+        }
+
+        if (selectedVoice) {
+            utterance.voice = selectedVoice;
+            console.log("Using voice:", selectedVoice.name, selectedVoice.lang);
+        } else {
+            // As per prompt, ensure utterance.voice is NOT set to allow iOS default.
+            console.warn("No specific voice found or voices array empty. Using browser default voice (utterance.voice will not be set).");
         }
         
         utterance.onstart = () => {
@@ -445,7 +537,7 @@ async function textToSpeech(text) {
         };
 
         utterance.onend = () => {
-            console.log("Speech finished.");
+            console.log("Speech finished."); // This onend is for the main utterance if not chunked
             isSpeaking = false;
             if(speakingIndicator) speakingIndicator.classList.remove('active');
         };
@@ -457,11 +549,13 @@ async function textToSpeech(text) {
             if(speakingIndicator) speakingIndicator.classList.remove('active');
         };
         
+        // Main try block for speaking logic
         try {
             const MAX_CHUNK_LENGTH = 100; 
             if (text.length > MAX_CHUNK_LENGTH && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
                 console.log("Text is long, chunking for mobile.");
                 const chunks = [];
+                // Simple sentence splitting, can be improved
                 const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
                 if (sentences.length > 1 && sentences.every(s => s.length <= MAX_CHUNK_LENGTH * 1.5)) {
                      sentences.forEach(sentence => chunks.push(sentence.trim()));
@@ -476,51 +570,71 @@ async function textToSpeech(text) {
                 }
                 console.log(`Speaking in ${chunks.length} chunks.`);
 
-                function speakChunk(chunkIndex) {
-                    if (chunkIndex >= chunks.length) {
-                        isSpeaking = false;
+                let currentChunkIndex = 0;
+                const speakNextChunk = () => {
+                    if (currentChunkIndex >= chunks.length) {
+                        isSpeaking = false; // All chunks spoken
                         if(speakingIndicator) speakingIndicator.classList.remove('active');
                         console.log("All chunks spoken.");
                         return;
                     }
-                    if (!isSpeaking && chunkIndex > 0) { 
+                    if (!isSpeaking && currentChunkIndex > 0) { // Speech stopped externally
                         console.log("Speech stopped during chunking.");
                         if(speakingIndicator) speakingIndicator.classList.remove('active');
                         return;
                     }
-                    const chunkUtterance = new SpeechSynthesisUtterance(chunks[chunkIndex]);
-                    chunkUtterance.lang = utterance.lang;
-                    if (utterance.voice) chunkUtterance.voice = utterance.voice; 
+
+                    const chunkText = chunks[currentChunkIndex];
+                    const chunkUtterance = new SpeechSynthesisUtterance(chunkText);
+                    chunkUtterance.lang = utterance.lang; // Inherit language
+                    if (selectedVoice) { // Inherit selected voice if any
+                        chunkUtterance.voice = selectedVoice;
+                    }
 
                     chunkUtterance.onend = () => {
-                        console.log(`Chunk ${chunkIndex + 1}/${chunks.length} finished.`);
-                        speakChunk(chunkIndex + 1);
+                        console.log(`Chunk ${currentChunkIndex + 1}/${chunks.length} finished.`);
+                        currentChunkIndex++;
+                        speakNextChunk(); // Speak next chunk
                     };
                     chunkUtterance.onerror = (event) => {
-                        console.error(`Error in chunk ${chunkIndex + 1}:`, event.error);
+                        console.error(`Error in chunk ${currentChunkIndex + 1}:`, event.error, "Text:", chunkText);
                         showStatusFloat(`Speech error in chunk: ${event.error}`, 5000);
                         isSpeaking = false; 
                         if(speakingIndicator) speakingIndicator.classList.remove('active');
+                        // Potentially stop further chunks here if needed.
                     };
-                    console.log(`Speaking chunk ${chunkIndex + 1}: "${chunks[chunkIndex]}"`);
+                    
+                    console.log(`Speaking chunk ${currentChunkIndex + 1}: "${chunkText}"`);
+                    // Requirement 3: try...catch for chunked speech
                     try {
                         window.speechSynthesis.speak(chunkUtterance);
-                    } catch (e) {
-                        console.error(`Synchronous error calling speak for chunk ${chunkIndex + 1}:`, e);
-                        showStatusFloat(`Speech error: ${e.message}`, 5000);
-                        isSpeaking = false;
+                    } catch (chunkSpeechError) {
+                        console.error("Error speaking chunk:", chunkSpeechError, "Text:", chunkText);
+                        showStatusFloat("Speech chunk error: " + chunkSpeechError.message, 3000);
+                        isSpeaking = false; 
                         if(speakingIndicator) speakingIndicator.classList.remove('active');
-                        return; 
+                        // Consider stopping further chunks
                     }
-                }
-                speakChunk(0);
+                };
+                speakNextChunk(); // Start speaking the first chunk
 
             } else {
-                window.speechSynthesis.speak(utterance);
+                // Requirement 3: try...catch for non-chunked speech (as per prompt)
+                // The original onend for the main utterance is already set up above.
+                // If an error occurs here, the main utterance.onerror will handle it.
+                // However, the prompt asks for a specific try...catch here.
+                try {
+                    window.speechSynthesis.speak(utterance);
+                } catch (speechError) {
+                    console.error("Error speaking non-chunked utterance:", speechError);
+                    showStatusFloat("Speech error: " + speechError.message, 3000);
+                    isSpeaking = false; 
+                    if(speakingIndicator) speakingIndicator.classList.remove('active');
+                }
             }
-        } catch (e) {
-            console.error("Error calling window.speechSynthesis.speak:", e);
-            showStatusFloat("Error initiating speech: " + e.message, 5000);
+        } catch (e) { 
+            console.error("Error in textToSpeech setup or general error before speaking:", e);
+            showStatusFloat("TTS general error: " + e.message, 5000);
             isSpeaking = false;
             if(speakingIndicator) speakingIndicator.classList.remove('active');
         }
