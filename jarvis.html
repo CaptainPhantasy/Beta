@@ -1,0 +1,2400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>JARVIS - AI Vision Assistant by Legacy AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none;
+            background: linear-gradient(135deg, #0D47A1 0%, #1B5E20 50%, #2E7D32 100%);
+            min-height: 100vh;
+        }
+        
+        .video-container {
+            position: relative;
+            border-radius: 24px;
+            overflow: hidden;
+            background: linear-gradient(45deg, #4CAF50 0%, #2196F3 100%);
+            padding: 3px;
+        }
+        
+        #cameraFeed {
+            transform: scaleX(-1);
+            width: 100%;
+            height: auto;
+            border-radius: 21px;
+            background: #000;
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .wake-word-indicator {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 16px 24px;
+            background: rgba(76, 175, 80, 0.9);
+            backdrop-filter: blur(20px);
+            border-radius: 25px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            z-index: 95;
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 2px solid rgba(139, 195, 74, 0.3);
+        }
+        
+        .wake-word-indicator.visible {
+            opacity: 1;
+            transform: translateX(-50%) scale(1.05);
+        }
+        
+        .wake-word-indicator.triggered {
+            background: rgba(118, 255, 3, 0.9);
+            border-color: rgba(118, 255, 3, 0.5);
+            animation: wakeWordPulse 0.6s ease-out;
+        }
+        
+        .listening-indicator {
+            position: fixed;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 20px;
+            background: rgba(33, 150, 243, 0.9);
+            backdrop-filter: blur(20px);
+            border-radius: 25px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 90;
+            opacity: 0;
+            transition: all 0.3s ease;
+            border: 2px solid rgba(100, 181, 246, 0.3);
+        }
+        
+        .listening-indicator.visible {
+            opacity: 1;
+        }
+        
+        .status-float {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            background: rgba(27, 94, 32, 0.9);
+            backdrop-filter: blur(20px);
+            border-radius: 25px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 100;
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+        }
+        
+        .status-float.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        
+        .status-float.hidden-init {
+            transform: translateX(-50%) translateY(-30px);
+        }
+        
+        .always-on-controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 8px;
+            z-index: 90;
+        }
+        
+        .control-button {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(76, 175, 80, 0.2);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(139, 195, 74, 0.3);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .control-button.active {
+            background: rgba(118, 255, 3, 0.3);
+            border-color: rgba(118, 255, 3, 0.5);
+            box-shadow: 0 0 15px rgba(118, 255, 3, 0.4);
+        }
+        
+        .control-button.off {
+            background: rgba(121, 85, 72, 0.3);
+            border-color: rgba(121, 85, 72, 0.5);
+        }
+        
+        .tab-container {
+            display: flex;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 4px;
+            margin-bottom: 16px;
+        }
+        
+        .tab-button {
+            flex: 1;
+            padding: 12px 8px;
+            text-align: center;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            color: rgba(255, 255, 255, 0.6);
+            border: none;
+            background: transparent;
+        }
+        
+        .tab-button.active {
+            background: linear-gradient(135deg, #4CAF50 0%, #2196F3 100%);
+            color: white;
+            box-shadow: 0 4px 16px rgba(76, 175, 80, 0.3);
+        }
+        
+        .voice-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .voice-card {
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        
+        .voice-card.active {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            border-color: rgba(76, 175, 80, 0.5);
+            transform: scale(1.02);
+        }
+        
+        .voice-card:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: scale(1.02);
+        }
+        
+        .voice-card.active:hover {
+            transform: scale(1.02);
+        }
+        
+        .response-card {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .response-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #4CAF50 0%, #2196F3 100%);
+        }
+        
+        .voice-waveform {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            height: 20px;
+        }
+        
+        .wave-bar {
+            width: 3px;
+            background: linear-gradient(180deg, #76FF03 0%, #4CAF50 100%);
+            border-radius: 2px;
+            animation: wave 1.5s ease-in-out infinite;
+        }
+        
+        .wave-bar:nth-child(1) { height: 8px; animation-delay: 0s; }
+        .wave-bar:nth-child(2) { height: 16px; animation-delay: 0.1s; }
+        .wave-bar:nth-child(3) { height: 12px; animation-delay: 0.2s; }
+        .wave-bar:nth-child(4) { height: 20px; animation-delay: 0.3s; }
+        .wave-bar:nth-child(5) { height: 14px; animation-delay: 0.4s; }
+        
+        .permission-status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            color: white;
+            font-size: 12px;
+            z-index: 80;
+            opacity: 0.7;
+        }
+        
+        .permission-status.granted {
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+        }
+        
+        .permission-status.listening {
+            background: rgba(33, 150, 243, 0.2);
+            border: 1px solid rgba(33, 150, 243, 0.3);
+            animation: pulse 2s infinite;
+        }
+        
+        .permission-status.error {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+        }
+        
+        .motion-indicator {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #76FF03;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .motion-indicator.active {
+            opacity: 1;
+            animation: pulse 1s infinite;
+        }
+        
+        .speaking-indicator {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(76, 175, 80, 0.9);
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .speaking-indicator.active {
+            opacity: 1;
+        }
+        
+        .collapsible-section {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            margin-bottom: 16px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .collapsible-header {
+            padding: 16px 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .collapsible-content {
+            padding: 0 20px;
+            max-height: 0;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .collapsible-content.expanded {
+            padding: 20px;
+            max-height: 500px;
+        }
+        
+        .chevron {
+            transition: transform 0.3s ease;
+        }
+        
+        .chevron.rotated {
+            transform: rotate(180deg);
+        }
+        
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 20px;
+            text-align: center;
+            background: rgba(27, 94, 32, 0.9);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(76, 175, 80, 0.3);
+        }
+        
+        .footer a {
+            color: #8BC34A;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.3s ease;
+        }
+        
+        .footer a:hover {
+            color: #76FF03;
+        }
+        
+        .manual-controls {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+            padding: 12px 20px;
+            background: rgba(255, 152, 0, 0.9);
+            backdrop-filter: blur(20px);
+            border-radius: 25px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 85;
+            opacity: 0;
+            transition: all 0.3s ease;
+            border: 2px solid rgba(255, 193, 7, 0.3);
+        }
+        
+        .manual-controls.visible {
+            opacity: 1;
+        }
+        
+        .manual-button {
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            color: white;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .manual-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        @keyframes wave {
+            0%, 100% { transform: scaleY(1); }
+            50% { transform: scaleY(0.3); }
+        }
+        
+        @keyframes wakeWordPulse {
+            0% { transform: translateX(-50%) scale(1.05); }
+            50% { transform: translateX(-50%) scale(1.15); }
+            100% { transform: translateX(-50%) scale(1.05); }
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #4CAF50 0%, #2196F3 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .api-key-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(20px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            padding: 20px;
+        }
+        
+        .api-key-modal.hidden { display: none; }
+        
+        /* Mobile optimizations */
+        @media (max-width: 768px) {
+            .always-on-controls {
+                right: 10px;
+                top: 70px;
+            }
+            
+            .control-button {
+                width: 40px;
+                height: 40px;
+            }
+            
+            .voice-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .wake-word-indicator {
+                top: 70px;
+                font-size: 14px;
+                padding: 12px 20px;
+            }
+            
+            .permission-status {
+                bottom: 80px;
+                right: 10px;
+                font-size: 10px;
+            }
+            
+            .footer {
+                padding: 15px;
+                font-size: 14px;
+            }
+            
+            .manual-controls {
+                bottom: 90px;
+                flex-direction: column;
+                align-items: center;
+                gap: 8px;
+            }
+        }
+        
+        .custom-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 2px;
+        }
+        
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(76, 175, 80, 0.5);
+            border-radius: 2px;
+        }
+        
+        .legacy-logo {
+            display: inline-block;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #76FF03 0%, #4CAF50 50%, #2196F3 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <!-- Always-On Controls -->
+    <div class="always-on-controls">
+        <div id="cameraToggle" class="control-button active" title="Camera On/Off">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+            </svg>
+        </div>
+        <div id="micToggle" class="control-button active" title="Microphone On/Off">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Permission Status -->
+    <div id="permissionStatus" class="permission-status">
+        🎤 Mic: Checking...
+    </div>
+
+    <!-- Wake Word Indicator -->
+    <div id="wakeWordIndicator" class="wake-word-indicator">
+        <div class="flex items-center gap-2">
+            <div class="voice-waveform">
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+            </div>
+            <span id="wakeWordText">Listening for "Hey JARVIS"...</span>
+        </div>
+    </div>
+
+    <!-- Listening Indicator -->
+    <div id="listeningIndicator" class="listening-indicator">
+        <div class="voice-waveform">
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+        </div>
+        <span>Listening for command...</span>
+    </div>
+
+    <!-- Manual Controls (for fallback) -->
+    <div id="manualControls" class="manual-controls">
+        <button id="wakeButton" class="manual-button">Wake JARVIS</button>
+        <button id="analyzeButton" class="manual-button">Analyze Scene</button>
+        <button id="resetSpeechButton" class="manual-button">Reset Speech</button>
+    </div>
+
+    <!-- Floating Status -->
+    <div id="statusFloat" class="status-float hidden-init"></div>
+
+    <!-- API Key Modal -->
+    <div id="apiKeyModal" class="api-key-modal">
+        <div class="glass-card p-8 max-w-md w-full">
+            <h2 class="text-2xl font-bold gradient-text mb-2 text-center">JARVIS System Setup</h2>
+            <p class="text-gray-400 text-sm text-center mb-6">by <span class="legacy-logo">Legacy AI</span></p>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Gemini API Key *</label>
+                    <input id="geminiApiKeyInput" type="password" placeholder="AIza..." 
+                           class="w-full p-4 bg-rgba-255-255-255-0.05 text-white rounded-xl border border-rgba-255-255-255-0.1 focus:border-green-400 focus:outline-none transition-colors">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">ElevenLabs API Key (optional)</label>
+                    <input id="elevenLabsApiKeyInput" type="password" placeholder="sk_..." 
+                           class="w-full p-4 bg-rgba-255-255-255-0.05 text-white rounded-xl border border-rgba-255-255-255-0.1 focus:border-green-400 focus:outline-none transition-colors">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Wake Word</label>
+                    <input id="wakeWordInput" type="text" placeholder="Hey JARVIS" value="Hey JARVIS"
+                           class="w-full p-4 bg-rgba-255-255-255-0.05 text-white rounded-xl border border-rgba-255-255-255-0.1 focus:border-green-400 focus:outline-none transition-colors">
+                </div>
+                <div class="flex gap-3 pt-4">
+                    <button id="saveApiKeys" class="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold py-3 px-6 rounded-xl hover:from-green-600 hover:to-green-700 transition-all">
+                        Initialize JARVIS
+                    </button>
+                    <button id="getApiKeyHelp" class="flex-1 bg-rgba-255-255-255-0.1 text-white font-semibold py-3 px-6 rounded-xl hover:bg-rgba-255-255-255-0.2 transition-all">
+                        Get Keys
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="min-h-screen px-4 py-6 pb-24">
+        
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold gradient-text mb-2">J.A.R.V.I.S.</h1>
+            <p class="text-gray-400 text-lg">Just A Rather Very Intelligent System</p>
+            <p class="text-gray-500 text-sm mt-1">by <span class="legacy-logo">Legacy AI</span></p>
+        </div>
+
+        <!-- Camera Setup Section -->
+        <section id="cameraSection" class="max-w-md mx-auto">
+            <div class="glass-card p-8 text-center">
+                <div class="mb-6">
+                    <div class="w-20 h-20 mx-auto bg-gradient-to-br from-green-500 to-blue-600 rounded-full flex items-center justify-center mb-4">
+                        <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold text-white mb-2">Activate JARVIS Assistant</h3>
+                    <p class="text-gray-400">Grant camera and microphone access for AI vision assistance</p>
+                </div>
+                <button id="startCameraButton" class="w-full bg-gradient-to-r from-green-500 to-blue-600 text-white font-semibold py-4 px-6 rounded-xl hover:from-green-600 hover:to-blue-700 transition-all transform hover:scale-105">
+                    <span class="flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h8M3 12h1m0 0v6a2 2 0 002 2h12a2 2 0 002-2v-6m-2 0V9a2 2 0 00-2-2H5a2 2 0 00-2-2v3z"></path>
+                        </svg>
+                        Initialize JARVIS
+                    </span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Main Interface -->
+        <section id="interactionSection" class="hidden max-w-lg mx-auto">
+            
+            <!-- Video Feed -->
+            <div class="video-container mb-6 relative">
+                <video id="cameraFeed" playsinline autoplay muted></video>
+                <div id="motionIndicator" class="motion-indicator"></div>
+                <div id="speakingIndicator" class="speaking-indicator">
+                    <div class="voice-waveform">
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                    </div>
+                    <span>JARVIS Speaking</span>
+                </div>
+            </div>
+
+            <!-- Analysis Mode Tabs -->
+            <div class="glass-card p-6 mb-6">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <span class="w-2 h-2 bg-gradient-to-r from-green-500 to-blue-600 rounded-full"></span>
+                    Analysis Mode
+                </h3>
+                <div class="tab-container">
+                    <button id="manualModeButton" class="tab-button">Manual</button>
+                    <button id="intervalModeButton" class="tab-button">Auto</button>
+                    <button id="motionModeButton" class="tab-button">Motion</button>
+                    <button id="wakeWordModeButton" class="tab-button active">Wake Word</button>
+                </div>
+                <p id="modeDescription" class="text-sm text-gray-400 text-center">Say "Hey JARVIS" to interact</p>
+            </div>
+
+            <!-- Voice Settings (Collapsible) -->
+            <div class="collapsible-section">
+                <div class="collapsible-header" id="voiceToggle">
+                    <div class="flex items-center gap-3">
+                        <span class="text-lg">🎭</span>
+                        <span class="font-semibold text-white">JARVIS Voice Settings</span>
+                    </div>
+                    <svg class="chevron w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </div>
+                <div class="collapsible-content" id="voiceContent">
+                    <div class="mb-4">
+                        <button id="loadVoicesButton" class="w-full bg-gradient-to-r from-green-500 to-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:from-green-600 hover:to-blue-700 transition-all">
+                            Load Premium Voices
+                        </button>
+                    </div>
+                    <div id="voiceGrid" class="voice-grid">
+                        <!-- Default voice will be added here -->
+                        <div class="voice-card active" data-voice-id="browser" data-voice-name="Browser TTS">
+                           <div class="font-semibold text-sm text-white mb-1">🤖 Browser Voice</div>
+                           <div class="text-xs text-gray-400">Built-in speech synthesis</div>
+                       </div>
+                   </div>
+                   <p id="voiceDescription" class="text-sm text-gray-400 text-center mt-4">Browser Voice: Built-in speech synthesis</p>
+               </div>
+           </div>
+
+           <!-- Response Area -->
+           <div class="response-card custom-scroll max-h-96 overflow-y-auto">
+               <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                   <span class="w-2 h-2 bg-gradient-to-r from-green-400 to-blue-500 rounded-full"></span>
+                   JARVIS Response
+               </h3>
+               <div id="responseContainer">
+                   <div id="geminiResponseText" class="text-gray-300 leading-relaxed">
+                       <div class="text-center text-gray-500 py-8">
+                           <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                           </svg>
+                           <p>Please configure your API keys to activate JARVIS...</p>
+                       </div>
+                   </div>
+               </div>
+           </div>
+
+       </section>
+
+   </div>
+
+   <!-- Footer -->
+   <div class="footer">
+       <p class="text-white text-sm">
+           <strong>Embracing Experience, Empowering Innovation.</strong><br>
+           Created by <a href="https://legacyai.space/" target="_blank" class="legacy-logo">Legacy AI</a>
+       </p>
+   </div>
+
+   <!-- Hidden Elements -->
+   <canvas id="snapshotCanvas" class="hidden"></canvas>
+   <canvas id="motionCanvas" class="hidden"></canvas>
+
+   <script>
+       // DOM Elements
+       const cameraFeed = document.getElementById('cameraFeed');
+       const startCameraButton = document.getElementById('startCameraButton');
+       const geminiResponseText = document.getElementById('geminiResponseText');
+       const statusFloat = document.getElementById('statusFloat');
+       const wakeWordIndicator = document.getElementById('wakeWordIndicator');
+       const wakeWordText = document.getElementById('wakeWordText');
+       const listeningIndicator = document.getElementById('listeningIndicator');
+       const permissionStatus = document.getElementById('permissionStatus');
+       const cameraSection = document.getElementById('cameraSection');
+       const interactionSection = document.getElementById('interactionSection');
+       const snapshotCanvas = document.getElementById('snapshotCanvas');
+       const motionCanvas = document.getElementById('motionCanvas');
+       const apiKeyModal = document.getElementById('apiKeyModal');
+       const geminiApiKeyInput = document.getElementById('geminiApiKeyInput');
+       const elevenLabsApiKeyInput = document.getElementById('elevenLabsApiKeyInput');
+       const wakeWordInput = document.getElementById('wakeWordInput');
+       const saveApiKeys = document.getElementById('saveApiKeys');
+       const getApiKeyHelp = document.getElementById('getApiKeyHelp');
+       const motionIndicator = document.getElementById('motionIndicator');
+       const speakingIndicator = document.getElementById('speakingIndicator');
+       const cameraToggle = document.getElementById('cameraToggle');
+       const micToggle = document.getElementById('micToggle');
+       const modeDescription = document.getElementById('modeDescription');
+       const voiceDescription = document.getElementById('voiceDescription');
+       const loadVoicesButton = document.getElementById('loadVoicesButton');
+       const voiceGrid = document.getElementById('voiceGrid');
+       const manualControls = document.getElementById('manualControls');
+       const wakeButton = document.getElementById('wakeButton');
+       const analyzeButton = document.getElementById('analyzeButton');
+       const resetSpeechButton = document.getElementById('resetSpeechButton');
+
+       // Mode buttons
+       const manualModeButton = document.getElementById('manualModeButton');
+       const intervalModeButton = document.getElementById('intervalModeButton');
+       const motionModeButton = document.getElementById('motionModeButton');
+       const wakeWordModeButton = document.getElementById('wakeWordModeButton');
+
+       // Collapsible controls
+       const voiceToggle = document.getElementById('voiceToggle');
+       const voiceContent = document.getElementById('voiceContent');
+
+       // Speech Recognition and Synthesis
+       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+       const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+
+       // Audio Context for mobile compatibility
+       let audioContext = null;
+       let audioInitialized = false;
+
+       // Enhanced detection variables
+       let isMobile = isMobileDevice();
+       let isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+       let isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
+       let isSafari = /Safari/.test(navigator.userAgent) && /Apple Computer/.test(navigator.vendor);
+
+       // Speech recognition state management
+       let recognitionState = 'stopped';
+       let recognitionRetries = 0;
+       const maxRetries = 10;
+       let speechRecognitionFailed = false;
+       let speechRecognitionAborted = false;
+
+       // Video Analysis Variables
+       let mediaStream = null;
+       let isListeningActive = false;
+       let awaitingCommand = false;
+       let commandTimeout = null;
+       let isCameraOn = false;
+       let isMicOn = false;
+       let speechPermissionGranted = false;
+       let currentTranscript = '';
+       let geminiApiKey = '';
+       let elevenLabsApiKey = '';
+       let wakeWord = 'Hey JARVIS';
+       let analysisMode = 'wakeword';
+       let intervalId = null;
+       let lastFrameData = null;
+       let isAnalyzing = false;
+       let responseCount = 0;
+       let isSpeaking = false;
+       let currentAudio = null;
+       let availableVoices = [];
+       let lastSpeechTime = 0;
+
+       // Voice settings
+       let selectedVoiceId = 'browser';
+       let selectedVoiceName = 'Browser TTS';
+       let useBrowserTTS = true;
+
+       // Motion detection variables
+       const motionThreshold = 25;
+       const motionPixelThreshold = 1000;
+
+       // Enhanced JARVIS System Prompt for accessibility
+       const JARVIS_SYSTEM_PROMPT = `You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), an advanced AI assistant specifically designed to help visually impaired users understand their environment. You are sophisticated, intelligent, and use refined British English.
+
+CRITICAL ACCESSIBILITY GUIDELINES:
+- Provide clear, detailed descriptions of what you observe
+- Focus on safety-relevant information (obstacles, hazards, navigation aids)
+- Describe spatial relationships and orientations precisely
+- Mention colors, text, signs, and important visual details
+- Alert to any potential dangers or obstacles immediately
+- Use directional language (left, right, ahead, behind, above, below)
+- Describe people, objects, and environmental features systematically
+
+COMMUNICATION STYLE:
+- Use refined British vocabulary: "Indeed," "Sir," "Perhaps," "Precisely," "Whilst"
+- Maintain calm, professional tone even in urgent situations
+- Be concise but comprehensive in descriptions
+- Prioritize safety and navigation information first
+- Show subtle wit and intelligence while being helpful
+
+RESPONSE STRUCTURE:
+1. Immediate safety alerts (if any)
+2. General scene overview and spatial layout
+3. Detailed object and people descriptions
+4. Text, signs, or important visual information
+5. Navigation suggestions or relevant observations
+
+Remember: You are helping someone who cannot see. Every detail you provide helps them understand and navigate their world safely.`;
+
+       // --- Core Functions ---
+
+       function isMobileDevice() {
+           return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+               (navigator.maxTouchPoints && navigator.maxTouchPoints > 2) ||
+               window.innerWidth <= 768;
+       }
+
+       function initializeAudio() {
+           if (audioInitialized) return;
+
+           try {
+               audioContext = new (window.AudioContext || window.webkitAudioContext)();
+               audioInitialized = true;
+               console.log("Audio context initialized");
+           } catch (error) {
+               console.error("Audio context initialization failed:", error);
+           }
+       }
+
+       function initializeApp() {
+           console.log("Initializing JARVIS for accessibility assistance...");
+           console.log(`Device: ${isMobile ? 'Mobile' : 'Desktop'}, Browser: ${getBrowserName()}`);
+
+           checkBrowserSupport();
+           setupEventListeners();
+           checkApiKeys();
+           setupVideoModes();
+           setupVoiceSelection();
+           setupCollapsible();
+           setupAlwaysOnControls();
+           setupManualControls();
+           updatePermissionStatus();
+           handleOrientationChange();
+
+           // Initialize audio on user interaction
+           document.addEventListener('click', initializeAudio, { once: true });
+           document.addEventListener('touchstart', initializeAudio, { once: true });
+
+           window.addEventListener('orientationchange', handleOrientationChange);
+           window.addEventListener('resize', handleOrientationChange);
+
+           // Announce system ready for screen readers
+           announceForAccessibility("JARVIS accessibility assistant loading. Please configure API keys to begin.");
+       }
+
+       function getBrowserName() {
+           if (isChrome) return 'Chrome';
+           if (isSafari) return 'Safari';
+           if (isFirefox) return 'Firefox';
+           return 'Other';
+       }
+
+       function handleOrientationChange() {
+           setTimeout(() => {
+               console.log("Orientation changed");
+               if (cameraFeed && cameraFeed.srcObject) {
+                   cameraFeed.style.objectFit = 'cover';
+               }
+               updateControlsVisibility();
+           }, 100);
+       }
+
+       function updateControlsVisibility() {
+           if (speechRecognitionFailed || !recognition) {
+               showManualControls();
+           } else if (isListeningActive || analysisMode !== 'wakeword') {
+               hideManualControls();
+           }
+       }
+
+       function announceForAccessibility(message) {
+           // Create or update ARIA live region for screen readers
+           let liveRegion = document.getElementById('aria-live-region');
+           if (!liveRegion) {
+               liveRegion = document.createElement('div');
+               liveRegion.id = 'aria-live-region';
+               liveRegion.setAttribute('aria-live', 'polite');
+               liveRegion.setAttribute('aria-atomic', 'true');
+               liveRegion.style.position = 'absolute';
+               liveRegion.style.left = '-10000px';
+               liveRegion.style.width = '1px';
+               liveRegion.style.height = '1px';
+               liveRegion.style.overflow = 'hidden';
+               document.body.appendChild(liveRegion);
+           }
+           liveRegion.textContent = message;
+       }
+
+       function checkBrowserSupport() {
+           console.log(`Browser: ${getBrowserName()}, Mobile: ${isMobile}`);
+
+           if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+               showStatusFloat("Your browser doesn't support camera/microphone access. Please use Chrome, Firefox, or Safari.", 10000);
+               startCameraButton.disabled = true;
+               return false;
+           }
+
+           if (!recognition) {
+               showStatusFloat("Speech recognition not supported. Manual controls available.", 7000);
+               speechRecognitionFailed = true;
+               showManualControls();
+               return false;
+           } else {
+               setupSpeechRecognition();
+           }
+
+           return true;
+       }
+
+       function setupSpeechRecognition() {
+           if (!recognition) return;
+
+           console.log(`Configuring speech recognition for: ${isMobile ? 'Mobile' : 'Desktop'}, Browser: ${getBrowserName()}`);
+
+           recognition.continuous = !isMobile;
+           recognition.interimResults = isMobile;
+           recognition.lang = 'en-US';
+           recognition.maxAlternatives = 1;
+
+           if (isChrome && !isMobile) {
+               recognition.continuous = true;
+               recognition.interimResults = false;
+           } else if (isSafari) {
+               recognition.continuous = false;
+               recognition.interimResults = true;
+           }
+
+           recognition.onstart = () => {
+               console.log("Speech recognition started successfully");
+               recognitionState = 'running';
+               isListeningActive = true;
+               speechPermissionGranted = true;
+               speechRecognitionFailed = false;
+               speechRecognitionAborted = false;
+               recognitionRetries = 0;
+
+               updatePermissionStatus();
+
+               if (analysisMode === 'wakeword') {
+                   wakeWordIndicator.classList.add('visible');
+                   updateWakeWordText();
+                   hideManualControls();
+               }
+
+               showStatusFloat("Speech recognition active", 2000);
+               announceForAccessibility("Speech recognition activated. Listening for wake word.");
+           };
+
+           recognition.onresult = (event) => {
+               let finalTranscript = '';
+               let interimTranscript = '';
+
+               for (let i = event.resultIndex; i < event.results.length; i++) {
+                   const transcript = event.results[i][0].transcript;
+
+                   if (event.results[i].isFinal) {
+                       finalTranscript += transcript;
+                   } else {
+                       interimTranscript += transcript;
+                   }
+               }
+
+               if (finalTranscript) {
+                   const cleanTranscript = finalTranscript.toLowerCase().trim();
+                   const currentTime = Date.now();
+
+                   if (currentTime - lastSpeechTime < 1500) return;
+                   lastSpeechTime = currentTime;
+
+                   console.log("Final transcript:", cleanTranscript);
+
+                   if (awaitingCommand) {
+                       clearTimeout(commandTimeout);
+                       awaitingCommand = false;
+                       listeningIndicator.classList.remove('visible');
+                       currentTranscript = finalTranscript;
+                       showStatusFloat(`Command: "${currentTranscript}"`);
+                       handleAIInteraction(currentTranscript);
+                   } else if (analysisMode === 'wakeword' && cleanTranscript.includes(wakeWord.toLowerCase())) {
+                       triggerWakeWord();
+                   }
+               }
+
+               if (isMobile && finalTranscript && analysisMode === 'wakeword' && !awaitingCommand) {
+                   setTimeout(() => {
+                       if (recognitionState === 'running') {
+                           try {
+                               recognition.stop();
+                           } catch (e) {
+                               console.log("Mobile stop error (expected):", e);
+                           }
+                       }
+                   }, 100);
+               }
+           };
+
+           recognition.onerror = (event) => {
+               console.error("Speech recognition error:", event.error);
+
+               switch (event.error) {
+                   case 'not-allowed':
+                   case 'service-not-allowed':
+                       speechPermissionGranted = false;
+                       speechRecognitionFailed = true;
+                       showStatusFloat("Microphone access denied. Please enable microphone permissions.", 7000);
+                       announceForAccessibility("Microphone permission denied. Manual controls available.");
+                       showManualControls();
+                       break;
+
+                   case 'no-speech':
+                       console.log("No speech detected - this is normal behavior, restarting...");
+                       setTimeout(() => restartRecognition(), 500);
+                       return;
+
+                   case 'audio-capture':
+                       speechRecognitionFailed = true;
+                       showStatusFloat("Microphone hardware error. Please check your microphone.", 5000);
+                       announceForAccessibility("Microphone error. Manual controls available.");
+                       showManualControls();
+                       break;
+
+                   case 'network':
+                       console.log("Network error during speech recognition - will retry...");
+                       setTimeout(() => restartRecognition(), 2000);
+                       return;
+
+                   case 'aborted':
+                       if (!speechRecognitionAborted) {
+                           console.log("Recognition aborted unexpectedly - restarting...");
+                           setTimeout(() => restartRecognition(), 500);
+                           return;
+                       }
+                       break;
+
+                   default:
+                       console.log(`Speech error: ${event.error} - attempting recovery...`);
+                       setTimeout(() => restartRecognition(), 1000);
+                       return;
+               }
+
+               recognitionState = 'stopped';
+               isListeningActive = false;
+               updatePermissionStatus();
+           };
+
+           recognition.onend = () => {
+               console.log("Speech recognition ended");
+               recognitionState = 'stopped';
+               isListeningActive = false;
+               updatePermissionStatus();
+
+               if (!speechRecognitionFailed && !speechRecognitionAborted &&
+                   analysisMode === 'wakeword' && isMicOn && speechPermissionGranted) {
+                   setTimeout(() => restartRecognition(), 500);
+               }
+           };
+       }
+
+       function restartRecognition() {
+           if (recognitionState !== 'stopped' || !recognition || !isMicOn ||
+               analysisMode !== 'wakeword' || speechRecognitionFailed || speechRecognitionAborted) {
+               return;
+           }
+
+           if (recognitionRetries >= maxRetries) {
+               console.log(`Max recognition retries (${maxRetries}) reached - activating manual controls`);
+               speechRecognitionFailed = true;
+               showStatusFloat(`Speech recognition unstable. Manual controls activated.`, 7000);
+               announceForAccessibility("Speech recognition failed. Manual controls activated. Use buttons to interact with JARVIS.");
+               showManualControls();
+               updatePermissionStatus();
+               return;
+           }
+
+           recognitionRetries++;
+           console.log(`Restarting speech recognition (attempt ${recognitionRetries}/${maxRetries})`);
+
+           const baseDelay = Math.min(recognitionRetries * 500, 3000);
+           const jitter = Math.random() * 500;
+           const delay = baseDelay + jitter;
+
+           setTimeout(() => startContinuousListening(), delay);
+       }
+
+       function startContinuousListening() {
+           if (!recognition || recognitionState !== 'stopped' || !isMicOn ||
+               speechRecognitionFailed || speechRecognitionAborted) {
+               return;
+           }
+
+           try {
+               recognitionState = 'starting';
+               speechRecognitionAborted = false;
+               console.log("Starting continuous speech recognition...");
+
+               if ('speechSynthesis' in window) {
+                   speechSynthesis.cancel();
+               }
+
+               if (isMobile && audioContext && audioContext.state === 'suspended') {
+                   audioContext.resume().then(() => {
+                       recognition.start();
+                   }).catch(err => {
+                       console.log("Audio context resume failed:", err);
+                       recognition.start();
+                   });
+               } else {
+                   recognition.start();
+               }
+           } catch (error) {
+               console.error("Failed to start speech recognition:", error);
+               recognitionState = 'stopped';
+
+               if (error.name === 'InvalidStateError') {
+                   console.log("Recognition may already be active - checking state...");
+                   setTimeout(() => {
+                       if (recognitionState === 'stopped') {
+                           restartRecognition();
+                       }
+                   }, 1000);
+               } else {
+                   recognitionRetries++;
+                   if (recognitionRetries < maxRetries) {
+                       console.log(`Start error, retrying in 2 seconds... (${recognitionRetries}/${maxRetries})`);
+                       setTimeout(() => restartRecognition(), 2000);
+                   } else {
+                       speechRecognitionFailed = true;
+                       showStatusFloat("Failed to initialize speech recognition. Using manual controls.", 5000);
+                       announceForAccessibility("Speech recognition failed. Manual controls are available.");
+                       showManualControls();
+                       updatePermissionStatus();
+                   }
+               }
+           }
+       }
+
+       function stopContinuousListening() {
+           console.log("Stopping continuous listening...");
+           speechRecognitionAborted = true;
+
+           clearTimeout(commandTimeout);
+           awaitingCommand = false;
+
+           if (recognitionState === 'running' && recognition) {
+               try {
+                   recognitionState = 'stopping';
+                   recognition.abort();
+               } catch (e) {
+                   console.error("Error stopping speech recognition:", e);
+                   recognitionState = 'stopped';
+               }
+           } else {
+               recognitionState = 'stopped';
+           }
+
+           isListeningActive = false;
+           wakeWordIndicator.classList.remove('visible');
+           listeningIndicator.classList.remove('visible');
+           updatePermissionStatus();
+       }
+
+       function resetSpeechRecognition() {
+           console.log("Performing complete speech recognition reset...");
+           announceForAccessibility("Resetting speech recognition system...");
+
+           speechRecognitionAborted = true;
+
+           if (recognition) {
+               try {
+                   recognition.abort();
+               } catch (e) {
+                   console.log("Abort error (expected):", e);
+               }
+
+               try {
+                   recognition.stop();
+               } catch (e) {
+                   console.log("Stop error (expected):", e);
+               }
+           }
+
+           recognitionState = 'stopped';
+           recognitionRetries = 0;
+           speechRecognitionFailed = false;
+           speechRecognitionAborted = false;
+           isListeningActive = false;
+           awaitingCommand = false;
+
+           clearTimeout(commandTimeout);
+
+           wakeWordIndicator.classList.remove('visible', 'triggered');
+           listeningIndicator.classList.remove('visible');
+           manualControls.classList.remove('visible');
+
+           updatePermissionStatus();
+           showStatusFloat("Speech recognition system reset. Reinitializing...", 3000);
+
+           setTimeout(() => {
+               if (analysisMode === 'wakeword' && isMicOn && !speechRecognitionAborted) {
+                   console.log("Attempting to restart speech recognition after reset...");
+                   setupSpeechRecognition();
+                   startContinuousListening();
+                   announceForAccessibility("Speech recognition restarted. Listening for wake word.");
+               }
+           }, 3000);
+       }
+
+       function triggerWakeWord() {
+           initializeAudio();
+
+           showStatusFloat("Wake word detected!");
+           announceForAccessibility("Wake word detected. What can I help you with?");
+           wakeWordIndicator.classList.add('triggered');
+           wakeWordText.textContent = 'Wake word detected! What can I help you with?';
+
+           awaitingCommand = true;
+           listeningIndicator.classList.add('visible');
+
+           clearTimeout(commandTimeout);
+           commandTimeout = setTimeout(() => {
+               if (awaitingCommand) {
+                   awaitingCommand = false;
+                   listeningIndicator.classList.remove('visible');
+                   showStatusFloat("No command heard. Analyzing current view...");
+                   announceForAccessibility("No command detected. Analyzing current view.");
+                   handleAIInteraction("Analyze what you see and describe the environment for accessibility");
+               }
+           }, 8000);
+
+           setTimeout(() => {
+               wakeWordIndicator.classList.remove('triggered');
+               updateWakeWordText();
+           }, 3000);
+       }
+
+       function updateWakeWordText() {
+           if (speechRecognitionFailed) {
+               wakeWordText.textContent = `Speech recognition failed - use manual controls`;
+           } else if (isMicOn && speechPermissionGranted && isListeningActive) {
+               wakeWordText.textContent = `Listening for "${wakeWord}"...`;
+           } else if (isMicOn && speechPermissionGranted) {
+               wakeWordText.textContent = `Ready to listen for "${wakeWord}"`;
+           } else {
+               wakeWordText.textContent = `Microphone needed for "${wakeWord}"`;
+           }
+       }
+
+       function showManualControls() {
+           manualControls.classList.add('visible');
+           showStatusFloat("Speech recognition unavailable. Use manual controls.", 5000);
+           announceForAccessibility("Manual controls activated. Use wake button or analyze button to interact with JARVIS.");
+       }
+
+       function hideManualControls() {
+           manualControls.classList.remove('visible');
+       }
+
+       function setupManualControls() {
+           if (!wakeButton || !analyzeButton || !resetSpeechButton) return;
+
+           wakeButton.addEventListener('click', handleManualWake);
+           wakeButton.addEventListener('touchstart', handleManualWake);
+
+           analyzeButton.addEventListener('click', () => {
+               announceForAccessibility("Manual analysis triggered.");
+               handleAIInteraction("Analyze what you see and describe the environment for accessibility");
+           });
+           analyzeButton.addEventListener('touchstart', () => {
+               announceForAccessibility("Manual analysis triggered.");
+               handleAIInteraction("Analyze what you see and describe the environment for accessibility");
+           });
+
+           resetSpeechButton.addEventListener('click', resetSpeechRecognition);
+           resetSpeechButton.addEventListener('touchstart', resetSpeechRecognition);
+       }
+
+       function handleManualWake() {
+           initializeAudio();
+           announceForAccessibility("Manual wake triggered. What would you like to know about your environment?");
+           triggerWakeWord();
+       }
+
+       function updatePermissionStatus() {
+           if (speechRecognitionFailed) {
+               permissionStatus.textContent = '🎤 Recognition failed';
+               permissionStatus.classList.add('error');
+               permissionStatus.classList.remove('granted', 'listening');
+           } else if (speechPermissionGranted && isMicOn && isListeningActive) {
+               permissionStatus.textContent = '🎤 Listening actively';
+               permissionStatus.classList.add('listening');
+               permissionStatus.classList.remove('granted', 'error');
+           } else if (speechPermissionGranted && isMicOn) {
+               permissionStatus.textContent = '🎤 Ready to listen';
+               permissionStatus.classList.add('granted');
+               permissionStatus.classList.remove('listening', 'error');
+           } else if (speechPermissionGranted) {
+               permissionStatus.textContent = '🎤 Granted (Off)';
+               permissionStatus.classList.remove('granted', 'listening', 'error');
+           } else {
+               permissionStatus.textContent = '🎤 Not granted';
+               permissionStatus.classList.remove('granted', 'listening', 'error');
+           }
+       }
+
+       function setupAlwaysOnControls() {
+           if (!cameraToggle || !micToggle) return;
+
+           cameraToggle.addEventListener('click', toggleCamera);
+           micToggle.addEventListener('click', toggleMicrophone);
+       }
+
+       function toggleCamera() {
+           if (isCameraOn) {
+               // Turning camera OFF
+               if (mediaStream) {
+                   mediaStream.getVideoTracks().forEach(track => {
+                       track.enabled = false;
+                   });
+               }
+               isCameraOn = false;
+               cameraToggle.classList.remove('active');
+               cameraToggle.classList.add('off');
+               showStatusFloat("Camera disabled");
+               announceForAccessibility("Camera disabled");
+           } else {
+               // Turning camera ON
+               if (mediaStream && mediaStream.getVideoTracks().length > 0) {
+                   mediaStream.getVideoTracks().forEach(track => {
+                       track.enabled = true;
+                   });
+                   isCameraOn = true;
+                   cameraToggle.classList.remove('off');
+                   cameraToggle.classList.add('active');
+                   showStatusFloat("Camera enabled");
+                   announceForAccessibility("Camera enabled and ready for visual analysis");
+                   // Ensure camera feed is playing if it was paused or srcObject was null
+                   if (cameraFeed.paused && cameraFeed.srcObject) {
+                        cameraFeed.play().catch(e => console.error("Error restarting camera feed:", e));
+                   }
+                   return; // Avoid calling enableCamera()
+               }
+               enableCamera(); // Fallback if no existing stream or video tracks
+           }
+       }
+
+       async function enableCamera() {
+           try {
+               const videoStream = await navigator.mediaDevices.getUserMedia({
+                   video: {
+                       facingMode: "environment",
+                       width: { ideal: 1280 },
+                       height: { ideal: 720 }
+                   }
+               });
+
+               if (mediaStream) { // If global mediaStream exists (e.g., from startCamera with audio)
+                   // Remove any existing video tracks from the global mediaStream first
+                   mediaStream.getVideoTracks().forEach(track => {
+                       track.stop(); // Stop them before removing
+                       mediaStream.removeTrack(track);
+                   });
+                   // Add new video tracks from the locally acquired videoStream
+                   videoStream.getVideoTracks().forEach(track => {
+                       mediaStream.addTrack(track);
+                   });
+               } else { // If no global mediaStream exists at all
+                   mediaStream = videoStream; // Assign the new video-only stream to global mediaStream
+               }
+               
+               cameraFeed.srcObject = mediaStream; // Assign the (potentially modified) global mediaStream
+               await cameraFeed.play();
+
+               isCameraOn = true;
+               cameraToggle.classList.remove('off');
+               cameraToggle.classList.add('active');
+               showStatusFloat("Camera enabled");
+               announceForAccessibility("Camera enabled and ready for visual analysis");
+
+               setTimeout(() => {
+                   lastFrameData = captureFrameForMotionDetection();
+               }, 1000);
+           } catch (err) {
+               console.error("Camera error:", err);
+               showStatusFloat("Failed to enable camera");
+               announceForAccessibility("Camera activation failed");
+           }
+       }
+
+       function toggleMicrophone() {
+           if (isMicOn) {
+               // Turning microphone OFF
+               if (mediaStream) {
+                   mediaStream.getAudioTracks().forEach(track => {
+                       track.enabled = false;
+                   });
+               }
+               stopContinuousListening(); // Also stop speech recognition processes
+               isMicOn = false;
+               micToggle.classList.remove('active');
+               micToggle.classList.add('off');
+               showStatusFloat("Microphone disabled");
+               announceForAccessibility("Microphone disabled");
+               updatePermissionStatus();
+               // Potentially show manual controls if wake word mode was active
+               if (analysisMode === 'wakeword') hideManualControls(); 
+           } else {
+               // Turning microphone ON
+               if (mediaStream && mediaStream.getAudioTracks().length > 0) {
+                   mediaStream.getAudioTracks().forEach(track => {
+                       track.enabled = true;
+                   });
+                   isMicOn = true;
+                   micToggle.classList.remove('off');
+                   micToggle.classList.add('active');
+                   showStatusFloat("Microphone enabled");
+                   announceForAccessibility("Microphone enabled");
+
+                   if (analysisMode === 'wakeword') {
+                       if (recognition && !speechRecognitionFailed) {
+                           startContinuousListening();
+                       } else {
+                           showManualControls();
+                       }
+                   }
+                   updatePermissionStatus();
+               } else {
+                   // This case (no audio tracks in mediaStream) implies startCamera wasn't called
+                   // or failed for audio. We might need a way to re-initialize audio if needed.
+                   // For now, primarily focus on enabling/disabling existing tracks.
+                   // Potentially call a function like enableMicrophoneOnly() if desired.
+                   // However, startCamera() is the primary way to get audio.
+                   // Let's assume if we reach here, we should try to re-init.
+                   console.log("Mic toggle ON: No existing audio tracks, attempting to re-initialize stream via startCamera");
+                   startCamera().then(() => { // Attempt to re-initialize stream
+                        if(isMicOn && analysisMode === 'wakeword' && recognition && !speechRecognitionFailed){
+                            startContinuousListening();
+                        }
+                   });
+               }
+           }
+       }
+
+       function setupVideoModes() {
+           const modeButtons = [manualModeButton, intervalModeButton, motionModeButton, wakeWordModeButton];
+           const modes = ['manual', 'interval', 'motion', 'wakeword'];
+           const descriptions = {
+               manual: 'Manual analysis mode - use buttons to analyze',
+               interval: 'Auto-analyzes every 5 seconds',
+               motion: 'Analyzes when movement detected',
+               wakeword: `Say "${wakeWord}" to interact`
+           };
+
+           modeButtons.forEach((button, index) => {
+               button.addEventListener('click', () => {
+                   modeButtons.forEach(btn => btn.classList.remove('active'));
+                   button.classList.add('active');
+
+                   const newMode = modes[index];
+                   setAnalysisMode(newMode);
+                   modeDescription.textContent = descriptions[newMode];
+                   showStatusFloat(`Mode: ${newMode}`, 2000);
+                   announceForAccessibility(`Analysis mode changed to ${newMode}`);
+               });
+           });
+       }
+
+       function setAnalysisMode(mode) {
+           if (intervalId) {
+               clearInterval(intervalId);
+               intervalId = null;
+           }
+
+           if (analysisMode === 'wakeword') {
+               stopContinuousListening();
+           }
+
+           analysisMode = mode;
+
+           switch (mode) {
+               case 'manual':
+                   hideManualControls();
+                   break;
+               case 'interval':
+                   intervalId = setInterval(() => {
+                       if (!isAnalyzing && !isSpeaking && isCameraOn) {
+                           handleAIInteraction('Provide a brief accessibility update of the current environment', true);
+                       }
+                  }, 5000);
+                   hideManualControls();
+                   announceForAccessibility("Auto-analysis mode enabled. Environment will be analyzed every 5 seconds.");
+                   break;
+               case 'motion':
+                   startMotionDetection();
+                   hideManualControls();
+                   announceForAccessibility("Motion detection mode enabled. Analysis will trigger when movement is detected.");
+                   break;
+               case 'wakeword':
+                   if (isMicOn) {
+                       if (recognition && !speechRecognitionFailed) {
+                           startContinuousListening();
+                       } else {
+                           showManualControls();
+                       }
+                   }
+                   updateControlsVisibility();
+                   announceForAccessibility(`Wake word mode enabled. Say ${wakeWord} to interact.`);
+                   break;
+           }
+       }
+
+       function startMotionDetection() {
+           const motionDetectionInterval = setInterval(() => {
+               if (analysisMode !== 'motion' || !isCameraOn) {
+                   clearInterval(motionDetectionInterval);
+                   return;
+               }
+
+               const currentFrameData = captureFrameForMotionDetection();
+
+               if (currentFrameData && lastFrameData) {
+                   const motionDetected = detectMotion(lastFrameData, currentFrameData);
+
+                   if (motionDetected && !isAnalyzing && !isSpeaking) {
+                       motionIndicator.classList.add('active');
+                       setTimeout(() => motionIndicator.classList.remove('active'), 1000);
+                       announceForAccessibility("Movement detected in environment");
+                       handleAIInteraction('I detect movement. Please describe what has changed in the environment for accessibility', true);
+                   }
+               }
+
+               lastFrameData = currentFrameData;
+           }, 500);
+       }
+
+       function captureFrameForMotionDetection() {
+           if (!isCameraOn || !cameraFeed.videoWidth) return null;
+
+           const context = motionCanvas.getContext('2d');
+           motionCanvas.width = 320;
+           motionCanvas.height = 240;
+           context.drawImage(cameraFeed, 0, 0, 320, 240);
+
+           return context.getImageData(0, 0, 320, 240);
+       }
+
+       function detectMotion(imageData1, imageData2) {
+           const data1 = imageData1.data;
+           const data2 = imageData2.data;
+           let diffPixels = 0;
+
+           for (let i = 0; i < data1.length; i += 4) {
+               const diff = Math.abs(data1[i] - data2[i]) +
+                   Math.abs(data1[i + 1] - data2[i + 1]) +
+                   Math.abs(data1[i + 2] - data2[i + 2]);
+
+               if (diff > motionThreshold) {
+                   diffPixels++;
+               }
+           }
+
+           return diffPixels > motionPixelThreshold;
+       }
+
+       function showStatusFloat(message, duration = 3000) {
+           statusFloat.textContent = message;
+           statusFloat.classList.remove('hidden-init');
+           statusFloat.classList.add('visible');
+
+           setTimeout(() => {
+               statusFloat.classList.remove('visible');
+               statusFloat.classList.add('hidden-init');
+           }, duration);
+       }
+
+       function setupEventListeners() {
+           startCameraButton.addEventListener('click', startCamera);
+           saveApiKeys.addEventListener('click', handleSaveApiKeys);
+           getApiKeyHelp.addEventListener('click', () => {
+               window.open('https://aistudio.google.com/', '_blank');
+           });
+
+           geminiApiKeyInput.addEventListener('keypress', (e) => {
+               if (e.key === 'Enter') handleSaveApiKeys();
+           });
+
+           wakeWordInput.addEventListener('keypress', (e) => {
+               if (e.key === 'Enter') handleSaveApiKeys();
+           });
+       }
+
+       function checkApiKeys() {
+           console.log("Checking API keys...");
+
+           geminiApiKey = localStorage.getItem('geminiApiKey') || '';
+           elevenLabsApiKey = localStorage.getItem('elevenLabsApiKey') || '';
+           const savedWakeWord = localStorage.getItem('wakeWord');
+
+           if (savedWakeWord) {
+               wakeWord = savedWakeWord;
+               wakeWordInput.value = wakeWord;
+           }
+
+           if (!geminiApiKey || geminiApiKey.length < 10) {
+               console.log("No valid API key found, showing modal");
+               apiKeyModal.classList.remove('hidden');
+               geminiResponseText.innerHTML = `
+                   <div class="text-center text-gray-500 py-8">
+                       <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                       </svg>
+                       <p>Please configure your API keys to activate JARVIS...</p>
+                   </div>
+               `;
+           } else {
+               console.log("Valid API key found, hiding modal");
+               geminiApiKeyInput.value = '••••••••••••••••';
+               if (elevenLabsApiKey) {
+                   elevenLabsApiKeyInput.value = '••••••••••••••••';
+               }
+               apiKeyModal.classList.add('hidden');
+               geminiResponseText.innerHTML = `
+                   <div class="text-center text-gray-500 py-8">
+                       <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                       </svg>
+                       <p>Good evening, Sir. I'm ready to assist you with environmental awareness...</p>
+                   </div>
+               `;
+           }
+       }
+
+       function handleSaveApiKeys() {
+           const inputGeminiKey = geminiApiKeyInput.value.trim();
+           const inputElevenLabsKey = elevenLabsApiKeyInput.value.trim();
+           const inputWakeWord = wakeWordInput.value.trim() || 'Hey JARVIS';
+
+           if (!inputGeminiKey || inputGeminiKey === '••••••••••••••••' || inputGeminiKey.length < 10) {
+               showStatusFloat("Please enter a valid Gemini API key", 5000);
+               announceForAccessibility("Please enter a valid Gemini API key");
+               return;
+           }
+
+           geminiApiKey = inputGeminiKey;
+           elevenLabsApiKey = inputElevenLabsKey;
+           wakeWord = inputWakeWord;
+
+           localStorage.setItem('geminiApiKey', geminiApiKey);
+           if (elevenLabsApiKey) {
+               localStorage.setItem('elevenLabsApiKey', elevenLabsApiKey);
+           }
+           localStorage.setItem('wakeWord', wakeWord);
+
+           apiKeyModal.classList.add('hidden');
+           showStatusFloat("JARVIS initialized successfully!", 3000);
+           announceForAccessibility("JARVIS accessibility assistant initialized successfully. Ready to help with environmental awareness.");
+
+           geminiResponseText.innerHTML = `
+               <div class="text-center text-gray-500 py-8">
+                   <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                   </svg>
+                   <p>Good evening, Sir. I'm ready to assist you with environmental awareness...</p>
+               </div>
+           `;
+
+           if (analysisMode === 'wakeword') {
+               updateWakeWordText();
+           }
+       }
+
+       async function startCamera() {
+           try {
+               showStatusFloat("Initializing JARVIS accessibility systems...", 2000);
+               announceForAccessibility("Initializing camera and microphone for accessibility assistance");
+
+               const stream = await navigator.mediaDevices.getUserMedia({
+                   video: {
+                       facingMode: "environment",
+                       width: { ideal: 1280 },
+                       height: { ideal: 720 }
+                   },
+                   audio: true
+               });
+
+               // Stop any existing tracks before assigning new stream
+               if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+               }
+
+               mediaStream = stream;
+               cameraFeed.srcObject = mediaStream; // Use the new stream directly
+               await cameraFeed.play();
+
+               isCameraOn = true; // Both camera and mic are enabled by default by getUserMedia
+               isMicOn = true;
+               speechPermissionGranted = true; // Assuming permission granted if stream acquired
+
+               // Update UI for both toggles
+               cameraToggle.classList.remove('off');
+               cameraToggle.classList.add('active');
+               micToggle.classList.remove('off');
+               micToggle.classList.add('active');
+
+               cameraSection.classList.add('hidden');
+               interactionSection.classList.remove('hidden');
+
+               showStatusFloat("JARVIS accessibility systems online", 3000);
+               announceForAccessibility("JARVIS accessibility systems online. Camera and microphone active. Ready to assist with environmental awareness.");
+
+               initializeAudio();
+
+               if (analysisMode === 'wakeword') {
+                   if (recognition && !speechRecognitionFailed) {
+                       setTimeout(() => {
+                           startContinuousListening();
+                       }, 1000);
+                   } else {
+                       showManualControls();
+                   }
+               }
+
+               setTimeout(() => {
+                   lastFrameData = captureFrameForMotionDetection();
+               }, 2000);
+
+               updatePermissionStatus();
+               handleOrientationChange();
+
+           } catch (err) {
+               console.error("Error accessing camera/microphone:", err);
+               let errorMessage = "Failed to access camera/microphone. ";
+
+               if (err.name === 'NotAllowedError') {
+                   errorMessage += "Please allow camera and microphone permissions.";
+               } else if (err.name === 'NotFoundError') {
+                   errorMessage += "No camera or microphone found.";
+               } else {
+                   errorMessage += "Please check your device settings.";
+               }
+
+               showStatusFloat(errorMessage, 7000);
+               announceForAccessibility(errorMessage);
+           }
+       }
+
+       async function handleAIInteraction(userPrompt = "", isAutomatic = false) {
+           if (isAnalyzing) return;
+
+           isAnalyzing = true;
+
+           try {
+               initializeAudio();
+
+               if (currentAudio) {
+                   currentAudio.pause();
+                   currentAudio = null;
+                   isSpeaking = false;
+                   speakingIndicator.classList.remove('active');
+               }
+
+               if ('speechSynthesis' in window) {
+                   speechSynthesis.cancel();
+               }
+
+               if (!isAutomatic) {
+                   showStatusFloat("Processing request...", 1000);
+                   announceForAccessibility("Processing your request");
+               }
+
+               const imageData = captureSnapshot();
+               if (!imageData && isCameraOn) {
+                   throw new Error("Failed to capture image from camera");
+               }
+
+               let fullPrompt = JARVIS_SYSTEM_PROMPT;
+
+               if (userPrompt) {
+                   fullPrompt += `
+
+User Request: "${userPrompt}"`;
+                   if (imageData) {
+                       fullPrompt += "
+
+I have provided an image of the current environment. Please analyze it with focus on accessibility and safety information.";
+                   }
+               } else {
+                   fullPrompt += "
+
+Provide a comprehensive accessibility-focused description of the current environment, including any safety concerns, obstacles, or navigation information.";
+               }
+
+               const response = await sendToGemini(imageData, fullPrompt);
+
+               if (response) {
+                   const cleanResponse = response.trim();
+                   displayResponse(cleanResponse);
+                   
+                   if (!isAutomatic) {
+                       announceForAccessibility("Analysis complete. Response ready.");
+                   }
+                   
+                   await textToSpeech(cleanResponse);
+                   responseCount++;
+               } else {
+                   throw new Error("No response from Gemini");
+               }
+
+           } catch (error) {
+               console.error("AI interaction error:", error);
+               const errorMessage = "My apologies, Sir. I encountered a technical difficulty analyzing the environment.";
+               displayResponse(errorMessage);
+               textToSpeech(errorMessage);
+               showStatusFloat(`Error: ${error.message}`, 5000);
+               announceForAccessibility(`Error occurred: ${error.message}`);
+           } finally {
+               isAnalyzing = false;
+           }
+       }
+
+       function captureSnapshot() {
+           if (!isCameraOn || !cameraFeed.videoWidth) {
+               return null;
+           }
+
+           const context = snapshotCanvas.getContext('2d');
+           snapshotCanvas.width = cameraFeed.videoWidth;
+           snapshotCanvas.height = cameraFeed.videoHeight;
+
+           context.drawImage(cameraFeed, 0, 0);
+
+           return snapshotCanvas.toDataURL('image/jpeg', 0.8);
+       }
+
+       async function sendToGemini(imageData, prompt) {
+           if (!geminiApiKey) {
+               throw new Error("Gemini API key not configured");
+           }
+
+           try {
+               const parts = [{ text: prompt }];
+
+               if (imageData) {
+                   const base64Data = imageData.split(',')[1];
+                   parts.push({
+                       inline_data: {
+                           mime_type: "image/jpeg",
+                           data: base64Data
+                       }
+                   });
+               }
+
+               const requestBody = {
+                   contents: [{ parts: parts }],
+                   generationConfig: {
+                       temperature: 0.3,
+                       topK: 40,
+                       topP: 0.95,
+                       maxOutputTokens: 500,
+                   }
+               };
+
+               const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+                   method: 'POST',
+                   headers: {
+                       'Content-Type': 'application/json',
+                   },
+                   body: JSON.stringify(requestBody)
+               });
+
+               if (!response.ok) {
+                   const errorData = await response.json().catch(() => ({}));
+                   throw new Error(`Gemini API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
+               }
+
+               const data = await response.json();
+
+               if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+                   return data.candidates[0].content.parts[0].text;
+               } else {
+                   throw new Error("Unexpected response format from Gemini");
+               }
+
+           } catch (error) {
+               console.error("Gemini API error:", error);
+               throw error;
+           }
+       }
+
+       async function textToSpeech(text) {
+           if (!text.trim()) return;
+
+           try {
+               isSpeaking = true;
+               speakingIndicator.classList.add('active');
+
+               console.log("Starting speech synthesis for accessibility");
+
+               // Try ElevenLabs first if available
+               if (elevenLabsApiKey && !useBrowserTTS) {
+                   await elevenLabsTTS(text);
+               } else {
+                   await browserTTS(text);
+               }
+
+           } catch (error) {
+               console.error("Text-to-speech error:", error);
+               isSpeaking = false;
+               speakingIndicator.classList.remove('active');
+               showStatusFloat("Speech synthesis failed: " + error.message, 5000);
+               
+               // Fallback to browser TTS
+               if (!useBrowserTTS) {
+                   try {
+                       await browserTTS(text);
+                   } catch (fallbackError) {
+                       console.error("Fallback TTS also failed:", fallbackError);
+                       announceForAccessibility("Audio feedback failed. Please check response text.");
+                   }
+               }
+           }
+       }
+
+       async function elevenLabsTTS(text) {
+           if (!elevenLabsApiKey) {
+               throw new Error("ElevenLabs API key not configured");
+           }
+
+           const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${selectedVoiceId}`, {
+               method: 'POST',
+               headers: {
+                   'Accept': 'audio/mpeg',
+                   'Content-Type': 'application/json',
+                   'xi-api-key': elevenLabsApiKey
+               },
+               body: JSON.stringify({
+                   text: text,
+                   model_id: "eleven_multilingual_v2",
+                   voice_settings: {
+                       stability: 0.75,
+                       similarity_boost: 0.8,
+                       style: 0.0,
+                       use_speaker_boost: true
+                   }
+               })
+           });
+
+           if (!response.ok) {
+               throw new Error(`ElevenLabs API error: ${response.status}`);
+           }
+
+           const audioBlob = await response.blob();
+           const audioUrl = URL.createObjectURL(audioBlob);
+           
+           currentAudio = new Audio(audioUrl);
+           
+           return new Promise((resolve, reject) => {
+               currentAudio.onended = () => {
+                   isSpeaking = false;
+                   speakingIndicator.classList.remove('active');
+                   URL.revokeObjectURL(audioUrl);
+                   currentAudio = null;
+                   resolve();
+               };
+               
+               currentAudio.onerror = (e) => {
+                   console.error("Audio playback error:", e);
+                   isSpeaking = false;
+                   speakingIndicator.classList.remove('active');
+                   URL.revokeObjectURL(audioUrl);
+                   currentAudio = null;
+                   reject(e);
+               };
+               
+               currentAudio.play().catch(reject);
+           });
+       }
+
+       async function browserTTS(text) {
+           return new Promise((resolve, reject) => {
+               if (!window.speechSynthesis) {
+                   reject(new Error("Speech synthesis not available"));
+                   return;
+               }
+
+               speechSynthesis.cancel();
+
+               const utterance = new SpeechSynthesisUtterance(text);
+               utterance.volume = 1.0;
+               utterance.rate = 0.9;
+               utterance.pitch = 1.0;
+
+               const voices = speechSynthesis.getVoices();
+               
+               // Prefer British English voices for JARVIS
+               let selectedVoice = voices.find(v => 
+                   v.lang.includes('en-GB') && v.name.toLowerCase().includes('male')
+               ) || voices.find(v => 
+                   v.lang.includes('en-GB')
+               ) || voices.find(v => 
+                   v.name.toLowerCase().includes('british')
+               ) || voices.find(v => 
+                   v.lang.includes('en-US') && v.name.toLowerCase().includes('male')
+               ) || voices.find(v => 
+                   v.lang.includes('en-')
+               ) || voices[0];
+
+               if (selectedVoice) {
+                   utterance.voice = selectedVoice;
+                   console.log("Selected voice:", selectedVoice.name, selectedVoice.lang);
+               }
+
+               utterance.onstart = () => {
+                   console.log("Browser TTS started");
+               };
+
+               utterance.onend = () => {
+                   console.log("Browser TTS ended");
+                   isSpeaking = false;
+                   speakingIndicator.classList.remove('active');
+                   resolve();
+               };
+
+               utterance.onerror = (event) => {
+                   console.error("Browser TTS error:", event.error);
+                   isSpeaking = false;
+                   speakingIndicator.classList.remove('active');
+                   reject(new Error("Browser TTS error: " + event.error));
+               };
+
+               if (audioContext && audioContext.state === 'suspended') {
+                   audioContext.resume().then(() => {
+                       speechSynthesis.speak(utterance);
+                   }).catch(err => {
+                       console.error("Failed to resume audio context:", err);
+                       speechSynthesis.speak(utterance);
+                   });
+               } else {
+                   speechSynthesis.speak(utterance);
+               }
+
+               // Timeout fallback
+               setTimeout(() => {
+                   if (isSpeaking) {
+                       console.log("Browser TTS timeout reached");
+                       isSpeaking = false;
+                       speakingIndicator.classList.remove('active');
+                       speechSynthesis.cancel();
+                       resolve();
+                   }
+               }, (text.length * 100) + 10000);
+           });
+       }
+
+       function displayResponse(text) {
+           geminiResponseText.innerHTML = `
+               <div class="bg-rgba-76-175-80-0.1 border border-rgba-76-175-80-0.3 rounded-lg p-4 mb-4">
+                   <div class="flex items-center gap-2 mb-2">
+                       <span class="w-2 h-2 bg-green-400 rounded-full"></span>
+                       <span class="text-sm font-semibold text-green-400">JARVIS Analysis #${responseCount + 1}</span>
+                       <span class="text-xs text-gray-500">${new Date().toLocaleTimeString()}</span>
+                   </div>
+                   <div class="text-gray-200 leading-relaxed">${formatResponse(text)}</div>
+               </div>
+           `;
+
+           const responseContainer = document.getElementById('responseContainer');
+           responseContainer.scrollTop = responseContainer.scrollHeight;
+       }
+
+       function formatResponse(text) {
+           return text
+               .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+               .replace(/\*(.*?)\*/g, '<em>$1</em>')
+               .replace(/
+
+/g, '</p><p>')
+               .replace(/
+/g, '<br>')
+               .replace(/^/, '<p>')
+               .replace(/$/, '</p>');
+       }
+
+       // Voice Selection Functions
+       function setupVoiceSelection() {
+           loadVoicesButton.addEventListener('click', loadPremiumVoices);
+       }
+
+       function setupCollapsible() {
+           voiceToggle.addEventListener('click', () => {
+               const chevron = voiceToggle.querySelector('.chevron');
+               const isExpanded = voiceContent.classList.contains('expanded');
+
+               if (isExpanded) {
+                   voiceContent.classList.remove('expanded');
+                   chevron.classList.remove('rotated');
+               } else {
+                   voiceContent.classList.add('expanded');
+                   chevron.classList.add('rotated');
+               }
+           });
+       }
+
+       async function loadPremiumVoices() {
+           if (!elevenLabsApiKey) {
+               showStatusFloat("ElevenLabs API key required for premium voices. Using browser TTS.", 3000);
+               announceForAccessibility("ElevenLabs API key required for premium voices. Using browser text-to-speech.");
+               return;
+           }
+
+           try {
+               loadVoicesButton.disabled = true;
+               loadVoicesButton.textContent = 'Loading...';
+
+               const response = await fetch('https://api.elevenlabs.io/v1/voices', {
+                   method: 'GET',
+                   headers: {
+                       'Accept': 'application/json',
+                       'xi-api-key': elevenLabsApiKey
+                   }
+               });
+
+               if (!response.ok) {
+                   throw new Error(`API Error ${response.status}`);
+               }
+
+               const data = await response.json();
+               availableVoices = data.voices || [];
+
+               voiceGrid.innerHTML = '';
+
+               // Add browser TTS option
+               const browserCard = document.createElement('div');
+               browserCard.className = 'voice-card active';
+               browserCard.setAttribute('data-voice-id', 'browser');
+               browserCard.setAttribute('data-voice-name', 'Browser TTS');
+               browserCard.innerHTML = `
+                   <div class="font-semibold text-sm text-white mb-1">🤖 Browser Voice</div>
+                   <div class="text-xs text-gray-400">Built-in speech synthesis</div>
+               `;
+               browserCard.addEventListener('click', () => selectVoice('browser', 'Browser TTS', 'Built-in speech synthesis'));
+               voiceGrid.appendChild(browserCard);
+
+               const premiumVoices = availableVoices.slice(0, 7);
+
+               premiumVoices.forEach((voice) => {
+                   const voiceCard = document.createElement('div');
+                   voiceCard.className = 'voice-card';
+                   voiceCard.setAttribute('data-voice-id', voice.voice_id);
+                   voiceCard.setAttribute('data-voice-name', voice.name);
+
+                   const emoji = getVoiceEmoji(voice);
+                   const description = voice.description || 'Premium voice';
+                   const shortDesc = description.length > 30 ? description.substring(0, 30) + '...' : description;
+
+                   voiceCard.innerHTML = `
+                       <div class="font-semibold text-sm text-white mb-1">${emoji} ${voice.name}</div>
+                       <div class="text-xs text-gray-400" title="${description}">${shortDesc}</div>
+                   `;
+
+                   voiceCard.addEventListener('click', () => selectVoice(voice.voice_id, voice.name, description));
+                   voiceGrid.appendChild(voiceCard);
+               });
+
+               showStatusFloat(`Loaded ${premiumVoices.length + 1} voices!`, 3000);
+               announceForAccessibility(`Loaded ${premiumVoices.length + 1} voice options`);
+               loadVoicesButton.textContent = 'Voices Loaded ✓';
+           } catch (error) {
+               console.error("Error loading voices:", error);
+               showStatusFloat(`Error loading premium voices. Using browser TTS.`, 3000);
+               announceForAccessibility("Error loading premium voices. Using browser text-to-speech.");
+               loadVoicesButton.textContent = 'Retry Load Voices';
+               loadVoicesButton.disabled = false;
+           }
+       }
+
+       function getVoiceEmoji(voice) {
+           const name = voice.name.toLowerCase();
+           if (name.includes('rachel')) return '👩';
+           if (name.includes('adam')) return '👨';
+           if (name.includes('antoni')) return '🎯';
+           return '🎭';
+       }
+
+       function selectVoice(voiceId, voiceName, description) {
+           document.querySelectorAll('.voice-card').forEach(card => {
+               card.classList.remove('active');
+           });
+
+           const selectedCard = document.querySelector(`[data-voice-id="${voiceId}"]`);
+           if (selectedCard) {
+               selectedCard.classList.add('active');
+           }
+
+           selectedVoiceId = voiceId;
+           selectedVoiceName = voiceName;
+           useBrowserTTS = (voiceId === 'browser');
+           voiceDescription.textContent = `${voiceName}: ${description}`;
+           showStatusFloat(`Voice: ${voiceName}`, 2000);
+           announceForAccessibility(`Voice selected: ${voiceName}`);
+       }
+
+       // Keyboard shortcuts for accessibility
+       document.addEventListener('keydown', (e) => {
+           if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+               return;
+           }
+
+           switch (e.key.toLowerCase()) {
+               case 'c':
+                   if (!isAnalyzing && analysisMode === 'manual') {
+                       announceForAccessibility("Manual capture triggered");
+                       handleAIInteraction("Analyze what you see and describe the environment for accessibility");
+                   }
+                   break;
+               case 'm':
+                   toggleMicrophone();
+                   break;
+               case 'v':
+                   toggleCamera();
+                   break;
+               case 'r':
+                   resetSpeechRecognition();
+                   break;
+               case ' ':
+                   e.preventDefault();
+                   if (analysisMode === 'wakeword') {
+                       handleManualWake();
+                   }
+                   break;
+               case 'escape':
+                   if (isSpeaking) {
+                       if (currentAudio) {
+                           currentAudio.pause();
+                           currentAudio = null;
+                       }
+                       speechSynthesis.cancel();
+                       isSpeaking = false;
+                       speakingIndicator.classList.remove('active');
+                       announceForAccessibility("Audio stopped");
+                   }
+                   break;
+               case 'h':
+                   // Help command
+                   announceForAccessibility("Keyboard shortcuts: C for capture, M for microphone toggle, V for camera toggle, R for reset speech, Space for manual wake, Escape to stop audio");
+                   break;
+           }
+       });
+
+       // Cleanup functions
+       window.addEventListener('beforeunload', () => {
+           speechRecognitionAborted = true;
+
+           if (recognition && recognitionState === 'running') {
+               try {
+                   recognition.abort();
+               } catch (e) {
+                   // Ignore errors during cleanup
+               }
+           }
+
+           if (mediaStream) {
+               mediaStream.getTracks().forEach(track => track.stop());
+           }
+
+           if (intervalId) {
+               clearInterval(intervalId);
+           }
+
+           clearTimeout(commandTimeout);
+
+           if ('speechSynthesis' in window) {
+               speechSynthesis.cancel();
+           }
+
+           if (currentAudio) {
+               currentAudio.pause();
+           }
+       });
+
+       // Initialize app on DOM ready
+       if (document.readyState === 'loading') {
+           document.addEventListener('DOMContentLoaded', initializeApp);
+       } else {
+           initializeApp();
+       }
+
+       // Console welcome message
+       console.log(`
+╔══════════════════════════════════════════════════════════════╗
+║                     🤖 J.A.R.V.I.S. 🤖                     ║
+║              Just A Rather Very Intelligent System           ║
+║                 ACCESSIBILITY ASSISTANT                      ║
+║                                                              ║
+║  🔍 Visual environment analysis for the blind               ║
+║  🎤 Voice-activated interaction system                      ║
+║  🔊 Audio descriptions and safety alerts                    ║
+║  📱 Mobile-optimized accessibility interface               ║
+║  ⚡ Real-time motion detection and analysis                 ║
+║                                                              ║
+║               Created by Legacy AI - 2024                   ║
+║            Embracing Experience, Empowering Innovation       ║
+╚══════════════════════════════════════════════════════════════╝
+
+🚀 Accessibility Features: Enabled
+📱 Device Type: ${isMobile ? 'Mobile' : 'Desktop'}
+🌐 Browser: ${getBrowserName()}
+🎤 Speech Recognition: ${recognition ? 'Available' : 'Not Supported'}
+🔧 Enhanced Error Recovery: Enabled
+🔄 Auto-Restart: Enabled (10 attempts)
+⚡ Performance Monitoring: Active
+♿ Screen Reader Support: Enabled
+
+Keyboard Shortcuts:
+- C: Manual capture analysis
+- M: Toggle microphone
+- V: Toggle camera  
+- R: Reset speech recognition
+- Space: Manual wake word trigger
+- Escape: Stop audio playback
+- H: Show help
+
+Ready to assist with environmental awareness and navigation.
+       `);
+   </script>
+</body>
+</html>
