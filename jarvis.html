@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Jarvis</title>
+<style>
+body {
+  font-family: sans-serif;
+  background-color: #f0f0f0;
+}
+
+#container {
+  width: 500px;
+  margin: 0 auto;
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 5px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+  text-align: center;
+  color: #333;
+}
+
+textarea {
+  width: 100%;
+  height: 100px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 10px;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+}
+
+button {
+  background-color: #4CAF50;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  margin-top: 5px;
+}
+
+#micButton {
+    background-color: #f44336; /* Red for off */
+}
+
+#micButton.active {
+    background-color: #4CAF50; /* Green for on */
+}
+
+
+#response {
+  margin-top: 20px;
+  padding: 10px;
+  background-color: #e0e0e0;
+  border-radius: 3px;
+}
+
+#speakingIndicator {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 20px;
+  height: 20px;
+  background-color: red;
+  border-radius: 50%;
+  display: none; /* Hidden by default */
+}
+
+#speakingIndicator.active {
+  display: block;
+  background-color: limegreen;
+}
+
+#statusFloat {
+  position: fixed;
+  bottom: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0,0,0,0.7);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 5px;
+  z-index: 1000;
+  display: none; /* Hidden by default */
+}
+</style>
+</head>
+<body>
+<div id="container">
+  <h1>Jarvis</h1>
+  <textarea id="prompt" placeholder="Enter your prompt here..."></textarea>
+  <button onclick="generateResponse()">Generate Response</button>
+  <button onclick="unlockAudio()">Unlock Audio</button>
+  <button onclick="stopSpeech()">Stop Speech</button>
+  <button id="micButton" onclick="toggleMicrophone()">Toggle Mic</button> 
+  <div id="response"></div>
+  <div id="speakingIndicator"></div>
+  <div id="statusFloat"></div>
+</div>
+
+<script>
+let audioContext;
+let isSpeaking = false;
+let speakingIndicator;
+let statusFloat;
+let voices = [];
+let speechReady = false;
+const MAX_VOICE_LOAD_RETRIES = 3;
+
+// Speech Recognition variables
+let recognition;
+let isMicOn = false;
+let speechPermissionGranted = false;
+let micPermissionAsked = false; // To track if we've asked for permission already
+let analysisMode = 'wakeword'; // Example mode, can be 'transcription' or 'wakeword'
+let lastRecognitionRestartTime = 0;
+const recognitionRestartCooldown = 1000; // 1 second cooldown
+let recognitionAttemptsCount = 0;
+const MAX_RECOGNITION_ATTEMPTS = 3; // Max restarts if it stops too quickly
+let micButton;
+
+
+// Function to initialize AudioContext
+function initializeAudio() {
+  if (!audioContext) {
+    try {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      console.log("AudioContext initialized.");
+      if (audioContext.state === 'suspended') {
+        audioContext.resume().then(() => {
+          console.log("AudioContext resumed successfully after initialization.");
+        }).catch(e => console.error("Error resuming AudioContext after initialization:", e));
+      }
+    } catch (e) {
+      console.error("Error initializing AudioContext:", e);
+      alert("AudioContext could not be initialized.");
+    }
+  }
+  return audioContext;
+}
+
+function unlockAudio() {
+  if (!audioContext) {
+    initializeAudio();
+  }
+  if (audioContext && audioContext.state === 'suspended') {
+    audioContext.resume().then(() => {
+      console.log("AudioContext resumed from unlockAudio.");
+      showStatusFloat("AudioContext Resumed!", 3000);
+    }).catch(e => {
+      console.error("Error resuming AudioContext from unlockAudio:", e);
+      showStatusFloat("Error resuming AudioContext.", 3000);
+    });
+  } else if (audioContext) {
+    showStatusFloat("AudioContext is already active.", 3000);
+  }
+}
+
+function showStatusFloat(message, duration = 3000) {
+    if (!statusFloat) statusFloat = document.getElementById('statusFloat');
+    if (statusFloat) { // Check if element exists
+        statusFloat.textContent = message;
+        statusFloat.style.display = 'block';
+        setTimeout(() => {
+            statusFloat.style.display = 'none';
+        }, duration);
+    } else {
+        console.warn("statusFloat element not found. Message:", message);
+    }
+}
+
+function initializeApp() {
+    console.log("Initializing app...");
+    speakingIndicator = document.getElementById('speakingIndicator');
+    statusFloat = document.getElementById('statusFloat');
+    micButton = document.getElementById('micButton');
+    
+    initializeAudio(); 
+
+    if ('speechSynthesis' in window) {
+        speechSynthesis.onvoiceschanged = () => {
+            voices = speechSynthesis.getVoices();
+            if (voices.length > 0) {
+                speechReady = true;
+                console.log("Speech synthesis voices loaded:", voices.length);
+            }
+        };
+        voices = speechSynthesis.getVoices(); 
+        if (voices.length > 0 && !speechReady) {
+             speechReady = true;
+             console.log("Speech synthesis voices already available:", voices.length);
+        } else if (voices.length === 0) {
+            console.log("Speech synthesis voices not immediately available. Waiting for onvoiceschanged.");
+        }
+    } else {
+        console.warn("Speech synthesis not supported by this browser.");
+        showStatusFloat("Speech synthesis not supported.", 5000);
+    }
+
+    // Initialize Speech Recognition
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        setupSpeechRecognition();
+    } else {
+        console.warn("Speech recognition not supported by this browser.");
+        showStatusFloat("Speech recognition not supported.", 5000);
+        if(micButton) micButton.disabled = true;
+    }
+
+    // Listener for page visibility changes
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            console.log("Page is now visible.");
+            // Potentially restart listening if it was on and permissions are granted
+            if (isMicOn && speechPermissionGranted && analysisMode === 'wakeword' && recognition && recognition.readyState !== 1) { // readyState 1 is LISTENING
+                 console.log("Restarting speech recognition on page visibility.");
+                 startContinuousListening();
+            }
+        } else {
+            console.log("Page is now hidden.");
+            // Stop recognition if it's running to save resources, unless it's essential to run in background (not typical for web)
+            // if (isMicOn && recognition && recognition.readyState === 1) {
+            //     stopContinuousListening(false); // Don't toggle mic state, just stop SR
+            // }
+        }
+    });
+}
+
+function setupSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.continuous = true; // Keep listening even after a pause
+    recognition.interimResults = true; // Get results as they are being processed
+    recognition.lang = 'en-US'; // Set language
+
+    recognition.onstart = () => {
+        console.log("Speech recognition started.");
+        isMicOn = true; // Reflect that recognition is active
+        if(micButton) micButton.classList.add('active');
+        lastRecognitionRestartTime = Date.now();
+        recognitionAttemptsCount++;
+    };
+
+    recognition.onresult = (event) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript;
+            } else {
+                interimTranscript += event.results[i][0].transcript;
+            }
+        }
+        console.log("Interim: ", interimTranscript);
+        console.log("Final: ", finalTranscript);
+
+        if (finalTranscript.trim()) {
+            // Process the final transcript (e.g., check for wake word, send to server)
+            document.getElementById('prompt').value = finalTranscript; // Example action
+            if (analysisMode === 'wakeword' && finalTranscript.toLowerCase().includes('jarvis')) {
+                showStatusFloat("Wake word detected!", 3000);
+                // Potentially switch to transcription mode or perform an action
+            }
+        }
+    };
+
+    recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        showStatusFloat("Mic error: " + event.error, 5000);
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+            speechPermissionGranted = false;
+            showStatusFloat("Microphone permission denied.", 5000);
+            if(micButton) micButton.classList.remove('active');
+            isMicOn = false;
+        } else if (event.error === 'no-speech') {
+            console.warn("No speech detected. Restarting if conditions met.");
+            // Potentially restart, similar to onend, but be more conservative
+             if (isMicOn && speechPermissionGranted && analysisMode === 'wakeword') {
+                startContinuousListening(); // Attempt restart
+            }
+        } else {
+             // For other errors, potentially stop or try to restart based on policy
+            if (isMicOn && speechPermissionGranted) {
+                startContinuousListening();
+            }
+        }
+    };
+
+    recognition.onend = () => {
+        console.log("Speech recognition ended.");
+        const currentTime = Date.now();
+        // Only attempt to restart if mic is supposed to be on, permissions are granted,
+        // and it's in a mode that requires continuous listening (e.g., wakeword).
+        if (analysisMode === 'wakeword' && isMicOn && speechPermissionGranted && micPermissionAsked &&
+            (currentTime - lastRecognitionRestartTime > recognitionRestartCooldown) &&
+            recognitionAttemptsCount < MAX_RECOGNITION_ATTEMPTS) {
+            console.log("Restarting speech recognition due to normal end (e.g. timeout).");
+            startContinuousListening();
+        } else {
+            // THIS IS THE LOG MESSAGE SPECIFIED IN THE SUBTASK
+            console.log(`Recognition ended but will not restart. Conditions: mode=${analysisMode}, micOn=${isMicOn}, permission=${speechPermissionGranted}, asked=${micPermissionAsked}, timeSinceRestart=${currentTime - lastRecognitionRestartTime}, attempts=${recognitionAttemptsCount}`);
+            if (isMicOn) { // If it was supposed to be on but isn't restarting
+                isMicOn = false; // Update state
+                if(micButton) micButton.classList.remove('active');
+                showStatusFloat("Mic off: Ended without restart.", 3000);
+            }
+        }
+    };
+}
+
+async function startContinuousListening() {
+    if (!recognition) {
+        console.warn("Speech recognition not set up.");
+        return;
+    }
+    if (isMicOn && recognition._started) { // Check if recognition is already started (using a common internal flag name)
+        console.log("Recognition is already active.");
+        return;
+    }
+
+    // Ensure AudioContext is running (important for some browsers)
+    if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+    }
+
+    // Check for microphone permission if not already granted or asked
+    if (!micPermissionAsked) {
+        try {
+            // A common way to trigger permission prompt if not using SR's own start
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(track => track.stop()); // Close the track immediately, we only need the permission
+            speechPermissionGranted = true;
+            micPermissionAsked = true;
+            console.log("Microphone permission obtained via getUserMedia.");
+        } catch (err) {
+            console.error("Error obtaining microphone permission:", err);
+            speechPermissionGranted = false;
+            micPermissionAsked = true; // We've asked
+            showStatusFloat("Mic permission failed: " + err.message, 5000);
+            isMicOn = false;
+            if(micButton) micButton.classList.remove('active');
+            return; // Don't proceed if permission failed
+        }
+    }
+
+    if (!speechPermissionGranted && micPermissionAsked) { // If permission was asked and denied
+        showStatusFloat("Mic permission denied. Cannot start listening.", 3000);
+        isMicOn = false;
+        if(micButton) micButton.classList.remove('active');
+        return;
+    }
+    
+    try {
+        recognition.start();
+        isMicOn = true; // Set this here, onstart will confirm
+        if(micButton) micButton.classList.add('active');
+    } catch (e) {
+        console.error("Error starting speech recognition:", e);
+        // onend or onerror should handle state if it fails to start
+        isMicOn = false;
+        if(micButton) micButton.classList.remove('active');
+    }
+}
+
+function stopContinuousListening(updateUI = true) {
+    if (recognition) {
+        recognition.stop();
+        console.log("Speech recognition explicitly stopped.");
+    }
+    if (updateUI) {
+        isMicOn = false;
+        if(micButton) micButton.classList.remove('active');
+    }
+}
+
+function toggleMicrophone() {
+    if (!recognition) {
+        showStatusFloat("Mic feature not available.", 3000);
+        return;
+    }
+    if (isMicOn) {
+        stopContinuousListening();
+        showStatusFloat("Mic Off.", 2000);
+    } else {
+        // Reset attempts count when user manually starts
+        recognitionAttemptsCount = 0; 
+        startContinuousListening();
+        // Status float for starting will be handled by onstart or onerror
+    }
+}
+
+
+async function textToSpeech(text) {
+    if (!('speechSynthesis' in window) || !text) {
+        console.warn("Speech synthesis not supported or no text provided.");
+        return;
+    }
+
+    if (isSpeaking) {
+        console.log("Speech already in progress. Cancelling previous and starting new.");
+        window.speechSynthesis.cancel(); 
+        isSpeaking = false; 
+        if(speakingIndicator) speakingIndicator.classList.remove('active');
+    }
+    
+    isSpeaking = true;
+    if(speakingIndicator) speakingIndicator.classList.add('active');
+
+    let voiceLoadRetryCount = 0;
+
+    function attemptToSpeak() {
+        if (!speechReady && voiceLoadRetryCount < MAX_VOICE_LOAD_RETRIES) {
+            console.log(`Voices not ready, retrying... (${voiceLoadRetryCount + 1})`);
+            voices = speechSynthesis.getVoices(); 
+            if (voices.length > 0) speechReady = true;
+            voiceLoadRetryCount++;
+            setTimeout(attemptToSpeak, 500); 
+            return;
+        }
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US'; 
+
+        if (voices.length === 0) {
+            console.warn("No speech synthesis voices available after retry. Attempting to speak with default voice (iOS fallback).");
+        } else {
+            let selectedVoice = voices.find(voice => voice.name === 'Google US English') || 
+                                voices.find(voice => voice.lang === 'en-US' && voice.default) ||
+                                voices.find(voice => voice.lang === 'en-US');
+            
+            if (selectedVoice) {
+                utterance.voice = selectedVoice;
+                console.log("Using voice:", selectedVoice.name);
+            } else {
+                console.warn("Could not find a preferred voice. Using browser default.");
+            }
+        }
+        
+        utterance.onstart = () => {
+            console.log("Speech started.");
+            isSpeaking = true;
+            if(speakingIndicator) speakingIndicator.classList.add('active');
+        };
+
+        utterance.onend = () => {
+            console.log("Speech finished.");
+            isSpeaking = false;
+            if(speakingIndicator) speakingIndicator.classList.remove('active');
+        };
+
+        utterance.onerror = (event) => {
+            console.error("SpeechSynthesisUtterance error:", event.error);
+            showStatusFloat("Speech error: " + event.error, 5000);
+            isSpeaking = false;
+            if(speakingIndicator) speakingIndicator.classList.remove('active');
+        };
+        
+        try {
+            const MAX_CHUNK_LENGTH = 100; 
+            if (text.length > MAX_CHUNK_LENGTH && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+                console.log("Text is long, chunking for mobile.");
+                const chunks = [];
+                const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
+                if (sentences.length > 1 && sentences.every(s => s.length <= MAX_CHUNK_LENGTH * 1.5)) {
+                     sentences.forEach(sentence => chunks.push(sentence.trim()));
+                } else { 
+                    let tempText = text;
+                    while (tempText.length > 0) {
+                        let splitPos = tempText.length > MAX_CHUNK_LENGTH ? tempText.lastIndexOf(' ', MAX_CHUNK_LENGTH) : tempText.length;
+                        if (splitPos === -1 || splitPos === 0) splitPos = Math.min(MAX_CHUNK_LENGTH, tempText.length);
+                        chunks.push(tempText.substring(0, splitPos));
+                        tempText = tempText.substring(splitPos).trim();
+                    }
+                }
+                console.log(`Speaking in ${chunks.length} chunks.`);
+
+                function speakChunk(chunkIndex) {
+                    if (chunkIndex >= chunks.length) {
+                        isSpeaking = false;
+                        if(speakingIndicator) speakingIndicator.classList.remove('active');
+                        console.log("All chunks spoken.");
+                        return;
+                    }
+                    if (!isSpeaking && chunkIndex > 0) { 
+                        console.log("Speech stopped during chunking.");
+                        if(speakingIndicator) speakingIndicator.classList.remove('active');
+                        return;
+                    }
+                    const chunkUtterance = new SpeechSynthesisUtterance(chunks[chunkIndex]);
+                    chunkUtterance.lang = utterance.lang;
+                    if (utterance.voice) chunkUtterance.voice = utterance.voice; 
+
+                    chunkUtterance.onend = () => {
+                        console.log(`Chunk ${chunkIndex + 1}/${chunks.length} finished.`);
+                        speakChunk(chunkIndex + 1);
+                    };
+                    chunkUtterance.onerror = (event) => {
+                        console.error(`Error in chunk ${chunkIndex + 1}:`, event.error);
+                        showStatusFloat(`Speech error in chunk: ${event.error}`, 5000);
+                        isSpeaking = false; 
+                        if(speakingIndicator) speakingIndicator.classList.remove('active');
+                    };
+                    console.log(`Speaking chunk ${chunkIndex + 1}: "${chunks[chunkIndex]}"`);
+                    try {
+                        window.speechSynthesis.speak(chunkUtterance);
+                    } catch (e) {
+                        console.error(`Synchronous error calling speak for chunk ${chunkIndex + 1}:`, e);
+                        showStatusFloat(`Speech error: ${e.message}`, 5000);
+                        isSpeaking = false;
+                        if(speakingIndicator) speakingIndicator.classList.remove('active');
+                        return; 
+                    }
+                }
+                speakChunk(0);
+
+            } else {
+                window.speechSynthesis.speak(utterance);
+            }
+        } catch (e) {
+            console.error("Error calling window.speechSynthesis.speak:", e);
+            showStatusFloat("Error initiating speech: " + e.message, 5000);
+            isSpeaking = false;
+            if(speakingIndicator) speakingIndicator.classList.remove('active');
+        }
+    }
+
+    attemptToSpeak();
+}
+
+function stopSpeech() {
+    if (isSpeaking) {
+        window.speechSynthesis.cancel();
+        isSpeaking = false;
+        if(speakingIndicator) speakingIndicator.classList.remove('active');
+        console.log("Speech stopped by user.");
+        showStatusFloat("Speech stopped.", 2000);
+    } else {
+        showStatusFloat("Nothing to stop.", 2000);
+    }
+}
+
+
+async function generateResponse() {
+  const promptText = document.getElementById('prompt').value;
+  const responseDiv = document.getElementById('response');
+
+  responseDiv.innerHTML = 'Loading...';
+
+  if (!audioContext || audioContext.state === 'suspended') {
+    unlockAudio(); // This is more about AudioContext for synthesis, not recognition.
+  }
+
+  try {
+    const response = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: promptText })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    responseDiv.innerHTML = data.response;
+    if (data.response) {
+        textToSpeech(data.response); 
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    responseDiv.innerHTML = 'Error generating response.';
+    showStatusFloat('Error: ' + error.message, 5000);
+  }
+}
+
+window.addEventListener('load', initializeApp);
+
+// Modified startCamera to potentially start speech recognition
+function startCamera() {
+  console.log("startCamera called");
+  if (!audioContext) initializeAudio(); // Global AudioContext
+  if (audioContext && audioContext.state === 'suspended') {
+    audioContext.resume().catch(e => console.error("Error resuming global AudioContext from startCamera:", e));
+  }
+
+  // --- Force audio unlock on camera start (for iOS compatibility) ---
+  console.log("startCamera: Attempting to unlock audio context and speech synthesis...");
+
+  // 1. Temporary AudioContext to play a silent sound
+  if ('webkitAudioContext' in window || 'AudioContext' in window) {
+    const tempContext = new (window.AudioContext || window.webkitAudioContext)();
+    const playSilentSound = () => {
+      const tempOsc = tempContext.createOscillator();
+      tempOsc.type = 'sine'; // Sine wave is common for this
+      tempOsc.frequency.setValueAtTime(20, tempContext.currentTime); // Low, often inaudible frequency
+      tempOsc.connect(tempContext.destination);
+      tempOsc.start(0);
+      tempOsc.stop(tempContext.currentTime + 0.001); // Play for a very short duration
+      tempOsc.onended = () => {
+        tempContext.close().then(() => console.log("TempAudioContext closed after silent sound."))
+                      .catch(e => console.error("Error closing TempAudioContext:", e));
+      };
+      console.log("Played silent sound with TempAudioContext.");
+    };
+
+    if (tempContext.state === 'suspended') {
+      console.log("TempAudioContext is suspended. Attempting to resume...");
+      tempContext.resume().then(() => {
+        console.log("TempAudioContext resumed successfully in startCamera.");
+        playSilentSound();
+      }).catch(e => {
+        console.error("Error resuming TempAudioContext in startCamera:", e);
+        // Still try to close if resume fails but context exists
+        if (tempContext.close) tempContext.close().catch(errClose => console.error("Error closing TempAudioContext after resume error:", errClose));
+      });
+    } else {
+      console.log("TempAudioContext is not suspended. State:", tempContext.state);
+      playSilentSound();
+    }
+  } else {
+    console.log("startCamera: AudioContext not supported for temp unlock.");
+  }
+
+  // 2. Temporary SpeechSynthesisUtterance
+  if ('speechSynthesis' in window && typeof SpeechSynthesisUtterance === 'function') {
+    try {
+      const tempUtterance = new SpeechSynthesisUtterance('');
+      // Set volume to 0 to ensure silence, though it's an empty string
+      tempUtterance.volume = 0; 
+      window.speechSynthesis.speak(tempUtterance);
+      console.log("Dispatched empty utterance for speech synthesis unlock.");
+    } catch (e) {
+      console.error("Error dispatching empty utterance:", e);
+    }
+  } else {
+    console.log("startCamera: SpeechSynthesis not supported for temp unlock.");
+  }
+  // --- End of audio unlock ---
+
+  // Actual camera logic would go here (placeholder)
+  console.log("startCamera: Main camera logic would proceed here.");
+
+  // As per previous subtask: startContinuousListening if in wake word mode
+  if (analysisMode === 'wakeword' && !isMicOn && speechPermissionGranted) {
+      console.log("Starting microphone from startCamera for wake word detection.");
+      // Reset attempts count as this is a user-initiated related action
+      recognitionAttemptsCount = 0; 
+      startContinuousListening();
+  } else if (analysisMode === 'wakeword' && !isMicOn && !speechPermissionGranted) {
+      console.log("startCamera: Mic permission not yet granted for wake word. User might need to click mic button.");
+      // Optionally, prompt user or guide them to click mic button
+      // showStatusFloat("Click Mic button to enable wake word.", 3000);
+  }
+}
+
+// This function was mentioned in a previous task but not used.
+// If it's meant to be a user action, it could also start recognition.
+function triggerWakeWord() {
+  console.log("triggerWakeWord called (currently placeholder)");
+  // If this function were tied to a user action to manually trigger wake word listening:
+  // if (analysisMode === 'wakeword' && !isMicOn && speechPermissionGranted) {
+  //    startContinuousListening();
+  // }
+}
+
+</script>
+</body>
+</html>
