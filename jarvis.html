@@ -1728,6 +1728,24 @@ Remember: You are helping someone who cannot see. Every detail you provide helps
            showStatusFloat("JARVIS initialized successfully!", 3000);
            announceForAccessibility("JARVIS accessibility assistant initialized successfully. Ready to help with environmental awareness.");
 
+           if (!isCameraOn && !mediaStream) { // Check if camera isn't already active
+               console.log("API keys saved, automatically attempting to start camera...");
+               startCamera(); // Attempt to start the camera and main interaction
+           } else if (isCameraOn) {
+               // If camera is already on, perhaps just ensure the interaction section is visible
+               // and camera section is hidden, though startCamera() should manage this.
+               // For now, the main goal is to start if it wasn't started.
+               console.log("API keys saved, camera is already on.");
+               // Ensure correct sections are visible if camera was already on
+               // This might be redundant if startCamera() has already run and set this up
+               if (cameraSection.classList.contains('hidden') && !interactionSection.classList.contains('hidden')) {
+                   // Already in the correct state
+               } else {
+                   cameraSection.classList.add('hidden');
+                   interactionSection.classList.remove('hidden');
+               }
+           }
+           // Update geminiResponseText with the welcome message
            geminiResponseText.innerHTML = `
                <div class="text-center text-gray-500 py-8">
                    <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
